@@ -352,7 +352,8 @@ export default function App() {
 
   const handleAdminLogin = (e) => {
     e.preventDefault();
-    if (adminPass === 'admin123') {
+    // --- CAMBIO DE CLAVE AQUI 👇 ---
+    if (adminPass === 'Luisana1510++') {
       setIsAdmin(true);
       setView('admin_panel');
       setAdminPass('');
@@ -591,11 +592,10 @@ export default function App() {
           <div className="max-w-sm mx-auto pt-12">
              <button onClick={() => setView('home')} className="mb-6 text-slate-400 flex items-center gap-1"><X size={14}/> Cancelar</button>
             <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
-              <h3 className="font-bold text-lg text-teal-900 text-center mb-6">Hola Dani, ingresa tu clave</h3>
+              <h3 className="font-bold text-lg text-teal-900 text-center mb-6">Hola Inperu Producciones, ingresa tu clave</h3>
               <form onSubmit={handleAdminLogin}>
                 <input type="password" placeholder="Contraseña" className="w-full p-3 border border-slate-200 rounded-lg mb-4 focus:ring-2 focus:ring-teal-500 outline-none" value={adminPass} onChange={(e) => setAdminPass(e.target.value)}/>
                 <button className="w-full bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-900">Ingresar</button>
-                <p className="text-center text-xs text-slate-400 mt-4">Clave: admin123</p>
               </form>
             </div>
           </div>
