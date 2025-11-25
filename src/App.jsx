@@ -49,8 +49,10 @@ import {
   Banknote,   
   Wallet,
   ExternalLink,
-  Camera, // Nuevo para subir foto de producto terminado
-  Send    // Nuevo para enviar mensaje
+  Camera, // Para foto final
+  Send,   // Para enviar WhatsApp
+  Pencil, // Para editar productos
+  Save    // Para guardar edición
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -77,8 +79,7 @@ export default function App() {
   // ========================================================================
   
   const LOGO_URL = "https://i.ibb.co/99Fcyfcj/LOGO-INPERU-PRODUCCIONES.png"; 
-  // URL de tu App (para que el cliente entre directo desde el mensaje de WhatsApp)
-  // Cuando tengas el link final de Vercel, pégalo aquí. Ejemplo: "https://inperu-app.vercel.app"
+  // Obtenemos la URL actual automáticamente para los mensajes de WhatsApp
   const APP_URL = window.location.origin; 
 
   const LINKS = {
@@ -105,16 +106,18 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
 
-  // Formularios
+  // Formularios Pedido
   const [newOrderId, setNewOrderId] = useState('');
   const [newOrderName, setNewOrderName] = useState('');
   const [newOrderPhone, setNewOrderPhone] = useState('');
   const [newOrderSocial, setNewOrderSocial] = useState('');
   const [newOrderDeposit, setNewOrderDeposit] = useState(''); 
+  
+  // Formulario Producto (Creación y Edición)
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
   const [prodImage, setProdImage] = useState('');
-  const [prodCategory, setProdCategory] = useState('Papelería');
+  const [editingProductId, setEditingProductId] = useState(null); // ID del producto en edición
 
   // Cotizador
   const [orderItems, setOrderItems] = useState([]); 
@@ -213,19 +216,58 @@ export default function App() {
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
-  // CRUD
-  const handleCreateProduct = async () => {
+  // --- CRUD PRODUCTOS (CREAR Y EDITAR) ---
+  const handleSaveProduct = async () => {
     if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
-      name: prodName, price: parseFloat(prodPrice), imageUrl: prodImage || 'https://via.placeholder.com/150?text=Sin+Foto', category: prodCategory, createdAt: serverTimestamp()
-    });
-    setProdName(''); setProdPrice(''); setProdImage(''); showNotification("Producto agregado");
+    
+    // Foto por defecto si no ponen nada
+    const imageToUse = prodImage || 'https://via.placeholder.com/150?text=Sin+Foto';
+
+    try {
+      if (editingProductId) {
+        // EDITAR
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), {
+          name: prodName, 
+          price: parseFloat(prodPrice), 
+          imageUrl: imageToUse,
+          updatedAt: serverTimestamp()
+        });
+        showNotification("Producto actualizado");
+      } else {
+        // CREAR NUEVO
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
+          name: prodName, 
+          price: parseFloat(prodPrice), 
+          imageUrl: imageToUse, 
+          category: 'Papelería', 
+          createdAt: serverTimestamp()
+        });
+        showNotification("Producto agregado");
+      }
+      // Limpiar form
+      setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null);
+    } catch (err) {
+      showNotification("Error al guardar", "error");
+    }
+  };
+
+  const handleEditProduct = (prod) => {
+    setProdName(prod.name);
+    setProdPrice(prod.price);
+    setProdImage(prod.imageUrl);
+    setEditingProductId(prod.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Ir arriba al formulario
+  };
+
+  const handleCancelEdit = () => {
+    setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null);
   };
 
   const handleDeleteProduct = async (id) => {
-    if(window.confirm("¿Borrar?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
+    if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
   };
 
+  // --- CRUD PEDIDOS ---
   const handleCreateOrder = async () => {
     if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos o items", "error");
     const total = calculateGrandTotal();
@@ -237,7 +279,7 @@ export default function App() {
       description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '),
       items: orderItems, totalPrice: total, deposit: deposit,
       phone: newOrderPhone, social: newOrderSocial, status: 'received',
-      finishedImage: '', // Campo para la foto final
+      finishedImage: '', 
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
     setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1);
@@ -256,7 +298,7 @@ export default function App() {
     if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id));
   };
 
-  // --- NUEVA FUNCION: AGREGAR FOTO FINAL ---
+  // --- FOTO FINAL ---
   const addFinishedPhoto = async (order) => {
     const url = prompt("Pega aquí el link de la foto del producto terminado:");
     if (url) {
@@ -265,12 +307,13 @@ export default function App() {
     }
   };
 
-  // --- NUEVA FUNCION: ENVIAR WHATSAPP ---
+  // --- ENVIAR WHATSAPP ---
   const sendWhatsAppMessage = (order) => {
     if (!order.phone) return showNotification("El pedido no tiene teléfono", "error");
     
     const statusText = statusConfig[order.status]?.label || "Actualizado";
-    const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\nTu pedido #${order.orderId} está en estado: *${statusText}*.\n\nPuedes ver el detalle y fotos aquí: ${APP_URL}\n\n¡Gracias!`;
+    // Mensaje pre-armado amigable
+    const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle y fotos aquí: ${APP_URL}\n\n¡Muchas gracias!`;
     
     const url = `https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
@@ -400,9 +443,9 @@ export default function App() {
                   <div className="p-6">
                     {/* FOTO DEL PRODUCTO TERMINADO (SI EXISTE) */}
                     {order.finishedImage && (
-                      <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative">
+                      <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group">
                         <div className="absolute top-0 left-0 bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg z-10">¡Tu Pedido Listo! ✨</div>
-                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-48 object-cover"/>
+                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-64 object-cover transition transform group-hover:scale-105"/>
                       </div>
                     )}
 
@@ -452,7 +495,7 @@ export default function App() {
             <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 text-center">
               <h3 className="font-bold text-lg text-teal-900 mb-6">Hola Inperu Producciones</h3>
               <form onSubmit={handleAdminLogin}>
-                <input type="password" placeholder="Contraseña" className="w-full p-3 border border-slate-200 rounded-lg mb-4 focus:ring-2 focus:ring-teal-500 outline-none" value={adminPass} onChange={(e) => setAdminPass(e.target.value)}/>
+                <input type="password" placeholder="Contraseña" className="w-full p-3 border bg-white border-slate-200 rounded-lg mb-4 focus:ring-2 focus:ring-teal-500 outline-none text-gray-900" value={adminPass} onChange={(e) => setAdminPass(e.target.value)}/>
                 <button className="w-full bg-slate-800 text-white font-bold py-3 rounded-lg hover:bg-slate-900">Ingresar</button>
               </form>
             </div>
@@ -470,21 +513,30 @@ export default function App() {
              {adminTab === 'products' && (
                <div>
                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
-                   <h3 className="font-bold text-teal-800 mb-4 flex items-center gap-2"><Plus size={18}/> Agregar Producto</h3>
+                   <h3 className="font-bold text-teal-800 mb-4 flex items-center gap-2">
+                     {editingProductId ? <><Pencil size={18}/> Editar Producto</> : <><Plus size={18}/> Agregar Producto</>}
+                   </h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                     <input placeholder="Nombre" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900" value={prodName} onChange={(e)=>setProdName(e.target.value)}/>
-                     <input type="number" placeholder="Precio" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900" value={prodPrice} onChange={(e)=>setProdPrice(e.target.value)}/>
-                     <input placeholder="URL Imagen (Opcional)" className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900" value={prodImage} onChange={(e)=>setProdImage(e.target.value)}/>
+                     {/* INPUTS EN BLANCO (bg-white) y TEXTO OSCURO (text-gray-900) */}
+                     <input placeholder="Nombre" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodName} onChange={(e)=>setProdName(e.target.value)}/>
+                     <input type="number" placeholder="Precio" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodPrice} onChange={(e)=>setProdPrice(e.target.value)}/>
+                     <input placeholder="URL Imagen (Opcional)" className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400" value={prodImage} onChange={(e)=>setProdImage(e.target.value)}/>
                    </div>
-                   <button onClick={handleCreateProduct} className="bg-teal-700 text-white px-6 py-2 rounded-lg font-bold">Guardar</button>
+                   <div className="flex gap-2">
+                      <button onClick={handleSaveProduct} className="bg-teal-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"><Save size={18}/> {editingProductId ? 'Actualizar' : 'Guardar'}</button>
+                      {editingProductId && <button onClick={handleCancelEdit} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-lg font-bold">Cancelar</button>}
+                   </div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                    {products.map(p => (
                      <div key={p.id} className="bg-white p-3 rounded-xl border shadow-sm relative group">
                         <img src={p.imageUrl} className="w-full h-24 object-cover rounded-lg mb-2"/>
-                        <p className="font-bold">{p.name}</p>
-                        <p className="text-teal-600 font-bold">${p.price}</p>
-                        <button onClick={() => handleDeleteProduct(p.id)} className="absolute top-2 right-2 bg-white p-1 rounded-full shadow text-red-500 opacity-0 group-hover:opacity-100 transition"><Trash2 size={14}/></button>
+                        <p className="font-bold text-gray-900">{p.name}</p>
+                        <p className="text-teal-600 font-bold">${p.price.toLocaleString()}</p>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                           <button onClick={() => handleEditProduct(p)} className="bg-white p-1 rounded-full shadow text-teal-600 hover:bg-teal-50"><Pencil size={14}/></button>
+                           <button onClick={() => handleDeleteProduct(p.id)} className="bg-white p-1 rounded-full shadow text-red-500 hover:bg-red-50"><Trash2 size={14}/></button>
+                        </div>
                      </div>
                    ))}
                  </div>
@@ -502,35 +554,36 @@ export default function App() {
                     <h3 className="font-bold text-teal-700 mb-4">Nuevo Pedido</h3>
                     {customerHistory.count > 0 && <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm font-bold">¡Cliente Frecuente! {customerHistory.count} compras previas.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                       <input value={newOrderId} readOnly className="p-3 bg-white border border-gray-300 rounded-lg text-center font-bold text-gray-900"/>
-                       <input placeholder="Teléfono" value={newOrderPhone} onChange={(e)=>setNewOrderPhone(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900"/>
-                       <input placeholder="Nombre" value={newOrderName} onChange={(e)=>setNewOrderName(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900"/>
+                       {/* INPUTS BLANCOS */}
+                       <input value={newOrderId} readOnly className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-center font-bold text-gray-900"/>
+                       <input placeholder="Teléfono" value={newOrderPhone} onChange={(e)=>setNewOrderPhone(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400"/>
+                       <input placeholder="Nombre" value={newOrderName} onChange={(e)=>setNewOrderName(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400"/>
                     </div>
                     
                     {/* CARRITO SIMPLE */}
                     <div className="bg-slate-50 p-4 rounded-lg mb-4 border border-slate-200">
                        <div className="flex gap-2 mb-2">
-                          <select className="p-2 border bg-white rounded-lg flex-1 text-gray-900" value={selectedProduct} onChange={(e)=>setSelectedProduct(e.target.value)}>
+                          <select className="p-2 border bg-white rounded-lg flex-1 text-gray-900 border-gray-300" value={selectedProduct} onChange={(e)=>setSelectedProduct(e.target.value)}>
                              <option value="custom">Personalizado</option>
                              {products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
-                          <input type="number" className="p-2 bg-white border rounded-lg w-20 text-gray-900" value={quantity} onChange={(e)=>setQuantity(parseInt(e.target.value)||1)}/>
-                          <input type="number" className="p-2 bg-white border rounded-lg w-24 text-gray-900" value={unitPrice} onChange={(e)=>setUnitPrice(parseInt(e.target.value)||0)}/>
+                          <input type="number" className="p-2 bg-white border border-gray-300 rounded-lg w-20 text-gray-900" value={quantity} onChange={(e)=>setQuantity(parseInt(e.target.value)||1)}/>
+                          <input type="number" className="p-2 bg-white border border-gray-300 rounded-lg w-24 text-gray-900" value={unitPrice} onChange={(e)=>setUnitPrice(parseInt(e.target.value)||0)}/>
                           <button onClick={handleAddItem} className="bg-teal-600 text-white p-2 rounded-lg"><Plus size={20}/></button>
                        </div>
-                       <input placeholder="Detalle..." className="w-full p-2 bg-white border rounded-lg mb-2 text-gray-900" value={customDescription} onChange={(e)=>setCustomDescription(e.target.value)}/>
+                       <input placeholder="Detalle..." className="w-full p-2 bg-white border border-gray-300 rounded-lg mb-2 text-gray-900 placeholder-gray-400" value={customDescription} onChange={(e)=>setCustomDescription(e.target.value)}/>
                        
                        {orderItems.map(i => (
-                          <div key={i.id} className="flex justify-between text-sm border-b py-1">
+                          <div key={i.id} className="flex justify-between text-sm border-b py-1 text-gray-800">
                              <span>{i.quantity} x {i.name}</span>
                              <div className="flex gap-4"><span>${i.subtotal}</span><button onClick={()=>handleRemoveItem(i.id)} className="text-red-500">x</button></div>
                           </div>
                        ))}
-                       <div className="text-right font-bold mt-2 text-lg">Total: ${calculateGrandTotal()}</div>
+                       <div className="text-right font-bold mt-2 text-lg text-gray-900">Total: ${calculateGrandTotal()}</div>
                     </div>
 
                     <div className="flex justify-end items-center gap-4">
-                       <div className="text-right"><span className="text-xs text-slate-400">Seña:</span><input type="number" className="ml-2 p-2 border bg-white rounded w-24 font-bold text-green-600" value={newOrderDeposit} onChange={(e)=>setNewOrderDeposit(e.target.value)}/></div>
+                       <div className="text-right"><span className="text-xs text-slate-400">Seña:</span><input type="number" className="ml-2 p-2 border bg-white border-gray-300 rounded w-24 font-bold text-green-600" value={newOrderDeposit} onChange={(e)=>setNewOrderDeposit(e.target.value)}/></div>
                        <button onClick={handleCreateOrder} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold">Crear Pedido</button>
                     </div>
                  </div>
@@ -542,26 +595,23 @@ export default function App() {
                           <h4 className="font-bold text-lg text-gray-900">{o.clientName}</h4>
                           <p className="text-sm text-slate-500 mb-2">{o.description}</p>
                           <div className="flex flex-wrap gap-2 items-center">
-                             {/* Botones de estado */}
                              {Object.keys(statusConfig).map(k => k !== 'delivered' && (
                                 <button key={k} onClick={()=>updateStatus(o.id, k)} className={`p-2 rounded-lg ${o.status===k ? 'bg-teal-600 text-white':'bg-slate-100 text-slate-400'}`}>{statusConfig[k].label}</button>
                              ))}
                              <button onClick={()=>updateStatus(o.id, 'delivered')} className={`p-2 rounded-lg ${o.status==='delivered'?'bg-slate-800 text-white':'bg-slate-100'}`}>Entregar</button>
                              
-                             {/* Botones de Acción */}
                              <div className="w-px h-6 bg-slate-200 mx-1"></div>
                              
-                             {/* FOTO TERMINADO */}
+                             {/* BOTON FOTO PRODUCTO TERMINADO */}
                              <button onClick={()=>addFinishedPhoto(o)} className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-teal-50 text-teal-600 border-teal-200' : 'bg-white text-slate-400 border-slate-200'}`} title="Agregar foto producto terminado">
                                 <Camera size={18}/>
                              </button>
 
-                             {/* WHATSAPP */}
+                             {/* BOTON ENVIAR WHATSAPP */}
                              <button onClick={()=>sendWhatsAppMessage(o)} className="bg-green-50 text-green-600 border border-green-200 p-2 rounded-lg hover:bg-green-100" title="Enviar aviso por WhatsApp">
                                 <Send size={18}/>
                              </button>
 
-                             {/* PAGAR */}
                              {((o.totalPrice||0) - (o.deposit||0)) > 0 && <button onClick={()=>markAsPaid(o)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 p-2 rounded-lg" title="Saldar deuda"><Banknote size={18}/></button>}
                              
                              <button onClick={()=>deleteOrder(o.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16}/></button>
