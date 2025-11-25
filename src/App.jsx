@@ -49,10 +49,10 @@ import {
   Banknote,   
   Wallet,
   ExternalLink,
-  Camera, // Para foto final
-  Send,   // Para enviar WhatsApp
-  Pencil, // Para editar productos
-  Save    // Para guardar edición
+  Camera, 
+  Send,   
+  Pencil, 
+  Save    
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -79,15 +79,18 @@ export default function App() {
   // ========================================================================
   
   const LOGO_URL = "https://i.ibb.co/99Fcyfcj/LOGO-INPERU-PRODUCCIONES.png"; 
-  // Obtenemos la URL actual automáticamente para los mensajes de WhatsApp
   const APP_URL = window.location.origin; 
 
+  // NUMEROS Y REDES
   const LINKS = {
-    whatsapp: "https://wa.me/5492974177629", 
-    whatsappChannel: "https://wa.me/5492974177629", 
+    ceci: "5492804547014",
+    dani: "5492974177629", 
     facebook: "https://www.facebook.com/share/p/17rqcQJWQT/",
     instagram: "https://www.instagram.com/inperuproducciones?igsh=MXZuaG5yaHQ0Y3Z6cQ=="
   };
+
+  // Función para generar link de WhatsApp con mensaje
+  const getWaLink = (phone, text) => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
   // ========================================================================
 
@@ -117,7 +120,7 @@ export default function App() {
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
   const [prodImage, setProdImage] = useState('');
-  const [editingProductId, setEditingProductId] = useState(null); // ID del producto en edición
+  const [editingProductId, setEditingProductId] = useState(null); 
 
   // Cotizador
   const [orderItems, setOrderItems] = useState([]); 
@@ -216,58 +219,35 @@ export default function App() {
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
-  // --- CRUD PRODUCTOS (CREAR Y EDITAR) ---
+  // CRUD PRODUCTOS
   const handleSaveProduct = async () => {
     if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
-    
-    // Foto por defecto si no ponen nada
     const imageToUse = prodImage || 'https://via.placeholder.com/150?text=Sin+Foto';
-
     try {
       if (editingProductId) {
-        // EDITAR
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), {
-          name: prodName, 
-          price: parseFloat(prodPrice), 
-          imageUrl: imageToUse,
-          updatedAt: serverTimestamp()
+          name: prodName, price: parseFloat(prodPrice), imageUrl: imageToUse, updatedAt: serverTimestamp()
         });
         showNotification("Producto actualizado");
       } else {
-        // CREAR NUEVO
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
-          name: prodName, 
-          price: parseFloat(prodPrice), 
-          imageUrl: imageToUse, 
-          category: 'Papelería', 
-          createdAt: serverTimestamp()
+          name: prodName, price: parseFloat(prodPrice), imageUrl: imageToUse, category: 'Papelería', createdAt: serverTimestamp()
         });
         showNotification("Producto agregado");
       }
-      // Limpiar form
       setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null);
-    } catch (err) {
-      showNotification("Error al guardar", "error");
-    }
+    } catch (err) { showNotification("Error al guardar", "error"); }
   };
 
   const handleEditProduct = (prod) => {
-    setProdName(prod.name);
-    setProdPrice(prod.price);
-    setProdImage(prod.imageUrl);
-    setEditingProductId(prod.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Ir arriba al formulario
+    setProdName(prod.name); setProdPrice(prod.price); setProdImage(prod.imageUrl); setEditingProductId(prod.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleCancelEdit = () => {
-    setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null);
-  };
+  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null); };
+  const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
 
-  const handleDeleteProduct = async (id) => {
-    if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id));
-  };
-
-  // --- CRUD PEDIDOS ---
+  // CRUD PEDIDOS
   const handleCreateOrder = async () => {
     if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos o items", "error");
     const total = calculateGrandTotal();
@@ -278,45 +258,27 @@ export default function App() {
       clientName: newOrderName, orderId: newOrderId,
       description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '),
       items: orderItems, totalPrice: total, deposit: deposit,
-      phone: newOrderPhone, social: newOrderSocial, status: 'received',
-      finishedImage: '', 
+      phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', 
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
     setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1);
     showNotification("Pedido creado");
   };
 
-  const updateStatus = async (id, status) => {
-    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status, updatedAt: serverTimestamp() });
-  };
-
-  const markAsPaid = async (order) => {
-    if(window.confirm("¿Marcar como pagado?")) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { deposit: order.totalPrice, updatedAt: serverTimestamp() });
-  };
-
-  const deleteOrder = async (id) => {
-    if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id));
-  };
-
-  // --- FOTO FINAL ---
+  const updateStatus = async (id, status) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status, updatedAt: serverTimestamp() }); };
+  const markAsPaid = async (order) => { if(window.confirm("¿Marcar como pagado?")) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { deposit: order.totalPrice, updatedAt: serverTimestamp() }); };
+  const deleteOrder = async (id) => { if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
+  
   const addFinishedPhoto = async (order) => {
     const url = prompt("Pega aquí el link de la foto del producto terminado:");
-    if (url) {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url });
-      showNotification("¡Foto agregada!");
-    }
+    if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); }
   };
 
-  // --- ENVIAR WHATSAPP ---
   const sendWhatsAppMessage = (order) => {
     if (!order.phone) return showNotification("El pedido no tiene teléfono", "error");
-    
     const statusText = statusConfig[order.status]?.label || "Actualizado";
-    // Mensaje pre-armado amigable
     const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle y fotos aquí: ${APP_URL}\n\n¡Muchas gracias!`;
-    
-    const url = `https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
+    window.open(`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   const handleAdminLogin = (e) => {
@@ -346,7 +308,6 @@ export default function App() {
   // --- RENDERIZADO ---
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      {/* HEADER */}
       <header className="bg-white shadow-sm sticky top-0 z-10 border-b border-teal-50">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setView('home'); setFoundOrders([]); setSearchQuery('');}}>
@@ -366,20 +327,16 @@ export default function App() {
           </div>
         )}
 
-        {/* VISTA HOME */}
         {view === 'home' && (
           <div className="flex flex-col items-center justify-center py-8 animate-in fade-in zoom-in duration-500">
             <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-teal-50/50 p-8 text-center border border-teal-50 relative overflow-hidden">
-              
               <div className="mb-8 relative z-10">
                 <div className="w-40 h-40 mx-auto bg-white rounded-full shadow-md p-1 flex items-center justify-center border-4 border-teal-50">
                    <img src={LOGO_URL} alt="Logo" className="w-full h-full object-contain rounded-full"/>
                 </div>
               </div>
-
               <h2 className="text-2xl font-bold mb-2 text-teal-900">Seguimiento de Pedidos</h2>
               <p className="text-slate-500 mb-8 text-sm">Ingresa tu número de teléfono para ver el estado.</p>
-              
               <form onSubmit={handleSearch} className="relative z-10">
                 <input 
                   type="text" placeholder="Tu teléfono o número de pedido"
@@ -391,33 +348,27 @@ export default function App() {
                   {loading ? 'Buscando...' : 'Consultar Estado'}
                 </button>
               </form>
-
-              {/* BOTONES DE CONTACTO */}
-              <div className="mt-8 pt-6 border-t border-slate-100 grid grid-cols-3 gap-3">
-                 <a href={LINKS.whatsapp} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1 group">
-                    <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition">
-                      <MessageCircle size={20}/>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">WhatsApp</span>
-                 </a>
-                 <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1 group">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition">
-                      <Facebook size={20}/>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Facebook</span>
-                 </a>
-                 <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="flex flex-col items-center gap-1 group">
-                    <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center group-hover:bg-pink-600 group-hover:text-white transition">
-                      <Instagram size={20}/>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Instagram</span>
-                 </a>
+              
+              {/* FOOTER HOME */}
+              <div className="mt-12 pt-6 border-t border-slate-100">
+                 <h3 className="text-xs font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
+                 <div className="flex justify-center gap-3 mb-6">
+                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 hover:scale-110 transition"><Facebook size={24}/></a>
+                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 hover:scale-110 transition"><Instagram size={24}/></a>
+                 </div>
+                 <div className="flex flex-col gap-3">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                        <MessageCircle size={20}/> Hablar con CECI
+                    </a>
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                        <MessageCircle size={20}/> Hablar con DANI
+                    </a>
+                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* VISTA RESULTADOS */}
         {view === 'search_result' && foundOrders.length > 0 && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 pb-12">
             <button onClick={() => setView('home')} className="mb-6 text-slate-500 hover:text-teal-700 flex items-center gap-2 text-sm font-medium transition">← Volver</button>
@@ -441,22 +392,16 @@ export default function App() {
                   </div>
 
                   <div className="p-6">
-                    {/* FOTO DEL PRODUCTO TERMINADO (SI EXISTE) */}
                     {order.finishedImage && (
                       <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group">
                         <div className="absolute top-0 left-0 bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg z-10">¡Tu Pedido Listo! ✨</div>
                         <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-64 object-cover transition transform group-hover:scale-105"/>
                       </div>
                     )}
-
                     <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
                       <div className="bg-teal-50 p-3 rounded-lg"><ShoppingBag className="text-teal-600 w-6 h-6"/></div>
-                      <div className="flex-1">
-                        <p className="text-sm text-slate-500 mb-1">Detalle</p>
-                        <p className="text-slate-800 font-medium text-sm">{order.description || "Sin detalle"}</p>
-                      </div>
+                      <div className="flex-1"><p className="text-sm text-slate-500 mb-1">Detalle</p><p className="text-slate-800 font-medium text-sm">{order.description || "Sin detalle"}</p></div>
                     </div>
-
                     <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
                        <div className="grid grid-cols-3 gap-4 text-center divide-x divide-slate-200">
                           <div><p className="text-xs text-slate-400 mb-1">Total</p><p className="font-bold text-slate-700">${(order.totalPrice||0).toLocaleString()}</p></div>
@@ -464,26 +409,49 @@ export default function App() {
                           <div><p className="text-xs text-slate-400 mb-1">Resta</p><p className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-slate-400'}`}>${balance.toLocaleString()}</p></div>
                        </div>
                     </div>
-
                     {order.status !== 'delivered' && (
                       <div className="mb-6">
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all duration-1000" style={{ width: `${statusConfig[order.status].progress}%` }}></div>
-                        </div>
+                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-teal-500 to-cyan-500 transition-all duration-1000" style={{ width: `${statusConfig[order.status].progress}%` }}></div></div>
                       </div>
                     )}
                   </div>
                 </div>
              )})}
 
-             {/* MARKETING EN RESULTADOS */}
-             <div className="text-center mt-12">
-               <h3 className="text-xl font-bold text-teal-900 mb-6">Síguenos en redes</h3>
-               <div className="flex justify-center gap-4">
-                 <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="bg-blue-600 text-white p-3 rounded-full shadow-lg hover:scale-110 transition"><Facebook/></a>
-                 <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="bg-pink-600 text-white p-3 rounded-full shadow-lg hover:scale-110 transition"><Instagram/></a>
-                 <a href={LINKS.whatsapp} target="_blank" rel="noreferrer" className="bg-green-600 text-white p-3 rounded-full shadow-lg hover:scale-110 transition"><MessageCircle/></a>
-               </div>
+             {/* SECCION PRODUCTOS DESTACADOS */}
+             <div className="mt-12 mb-12">
+                <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-lg font-bold text-teal-900">Nuestros Productos</h3><div className="h-px bg-slate-200 flex-1"></div></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {products.map(prod => (
+                    <div key={prod.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-center group hover:border-teal-200 transition">
+                       <img src={prod.imageUrl} className="w-20 h-20 object-cover rounded-lg bg-slate-50" alt={prod.name}/>
+                       <div className="flex-1 min-w-0">
+                         <p className="font-bold text-slate-800 text-sm truncate">{prod.name}</p>
+                         <p className="text-teal-600 font-bold text-lg mb-2">${prod.price.toLocaleString()}</p>
+                         <a href={getWaLink(LINKS.dani, `Hola! 👋 Quisiera consultar por este producto: ${prod.name}`)} target="_blank" className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-xs px-3 py-1.5 rounded-full font-bold hover:bg-green-100 transition">
+                           <MessageCircle size={14}/> Consultar
+                         </a>
+                       </div>
+                    </div>
+                  ))}
+                </div>
+             </div>
+
+             {/* FOOTER CONTACTO */}
+             <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-50 text-center">
+                 <h3 className="text-sm font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
+                 <div className="flex justify-center gap-4 mb-6">
+                    <a href={LINKS.facebook} target="_blank" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={20}/></a>
+                    <a href={LINKS.instagram} target="_blank" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
+                 </div>
+                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                        <MessageCircle size={20}/> Hablar con CECI
+                    </a>
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                        <MessageCircle size={20}/> Hablar con DANI
+                    </a>
+                 </div>
              </div>
           </div>
         )}
@@ -513,11 +481,8 @@ export default function App() {
              {adminTab === 'products' && (
                <div>
                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-6">
-                   <h3 className="font-bold text-teal-800 mb-4 flex items-center gap-2">
-                     {editingProductId ? <><Pencil size={18}/> Editar Producto</> : <><Plus size={18}/> Agregar Producto</>}
-                   </h3>
+                   <h3 className="font-bold text-teal-800 mb-4 flex items-center gap-2">{editingProductId ? <><Pencil size={18}/> Editar Producto</> : <><Plus size={18}/> Agregar Producto</>}</h3>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                     {/* INPUTS EN BLANCO (bg-white) y TEXTO OSCURO (text-gray-900) */}
                      <input placeholder="Nombre" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodName} onChange={(e)=>setProdName(e.target.value)}/>
                      <input type="number" placeholder="Precio" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodPrice} onChange={(e)=>setProdPrice(e.target.value)}/>
                      <input placeholder="URL Imagen (Opcional)" className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400" value={prodImage} onChange={(e)=>setProdImage(e.target.value)}/>
@@ -554,13 +519,11 @@ export default function App() {
                     <h3 className="font-bold text-teal-700 mb-4">Nuevo Pedido</h3>
                     {customerHistory.count > 0 && <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm font-bold">¡Cliente Frecuente! {customerHistory.count} compras previas.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                       {/* INPUTS BLANCOS */}
                        <input value={newOrderId} readOnly className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-center font-bold text-gray-900"/>
                        <input placeholder="Teléfono" value={newOrderPhone} onChange={(e)=>setNewOrderPhone(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400"/>
                        <input placeholder="Nombre" value={newOrderName} onChange={(e)=>setNewOrderName(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400"/>
                     </div>
                     
-                    {/* CARRITO SIMPLE */}
                     <div className="bg-slate-50 p-4 rounded-lg mb-4 border border-slate-200">
                        <div className="flex gap-2 mb-2">
                           <select className="p-2 border bg-white rounded-lg flex-1 text-gray-900 border-gray-300" value={selectedProduct} onChange={(e)=>setSelectedProduct(e.target.value)}>
@@ -599,21 +562,10 @@ export default function App() {
                                 <button key={k} onClick={()=>updateStatus(o.id, k)} className={`p-2 rounded-lg ${o.status===k ? 'bg-teal-600 text-white':'bg-slate-100 text-slate-400'}`}>{statusConfig[k].label}</button>
                              ))}
                              <button onClick={()=>updateStatus(o.id, 'delivered')} className={`p-2 rounded-lg ${o.status==='delivered'?'bg-slate-800 text-white':'bg-slate-100'}`}>Entregar</button>
-                             
                              <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                             
-                             {/* BOTON FOTO PRODUCTO TERMINADO */}
-                             <button onClick={()=>addFinishedPhoto(o)} className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-teal-50 text-teal-600 border-teal-200' : 'bg-white text-slate-400 border-slate-200'}`} title="Agregar foto producto terminado">
-                                <Camera size={18}/>
-                             </button>
-
-                             {/* BOTON ENVIAR WHATSAPP */}
-                             <button onClick={()=>sendWhatsAppMessage(o)} className="bg-green-50 text-green-600 border border-green-200 p-2 rounded-lg hover:bg-green-100" title="Enviar aviso por WhatsApp">
-                                <Send size={18}/>
-                             </button>
-
-                             {((o.totalPrice||0) - (o.deposit||0)) > 0 && <button onClick={()=>markAsPaid(o)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 p-2 rounded-lg" title="Saldar deuda"><Banknote size={18}/></button>}
-                             
+                             <button onClick={()=>addFinishedPhoto(o)} className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-teal-50 text-teal-600 border-teal-200' : 'bg-white text-slate-400 border-slate-200'}`}><Camera size={18}/></button>
+                             <button onClick={()=>sendWhatsAppMessage(o)} className="bg-green-50 text-green-600 border border-green-200 p-2 rounded-lg hover:bg-green-100"><Send size={18}/></button>
+                             {((o.totalPrice||0) - (o.deposit||0)) > 0 && <button onClick={()=>markAsPaid(o)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 p-2 rounded-lg"><Banknote size={18}/></button>}
                              <button onClick={()=>deleteOrder(o.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16}/></button>
                           </div>
                        </div>
