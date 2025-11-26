@@ -9,8 +9,7 @@ import {
   doc, 
   onSnapshot, 
   query, 
-  serverTimestamp, 
-  orderBy 
+  serverTimestamp 
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -35,26 +34,22 @@ import {
   MessageCircle, 
   Phone,
   ShoppingBag,
-  Calculator,
-  UserCheck,
   Gift,
   Image as ImageIcon,
-  Tag,
   DollarSign,
   LayoutGrid,
   List,
   ShoppingCart,
   BookOpen, 
-  Coins,      
   Banknote,   
-  Wallet,
-  ExternalLink,
   Camera, 
   Send,   
   Pencil, 
   Save,
   Images,
-  Minus
+  Minus,
+  Settings2,
+  ArrowRight
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -72,14 +67,50 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "inperu-web"; 
 
+// --- COMPONENTES AUXILIARES ---
+
+const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
+  const [currentImg, setCurrentImg] = useState(prod.imageUrl);
+  const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
+
+  useEffect(() => { setCurrentImg(prod.imageUrl); }, [prod]);
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
+      <div className="p-3 pb-0">
+         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => onEnlarge(currentImg)}>
+            <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
+         </div>
+         {images.length > 1 && (
+           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+             {images.map((img, idx) => (
+               <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentImg(img); }} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
+                 <img src={img} className="w-full h-full object-cover" alt={`thumb-${idx}`}/>
+               </button>
+             ))}
+           </div>
+         )}
+      </div>
+      <div className="p-4 flex-1 flex flex-col">
+         <h4 className="font-bold text-slate-800 text-sm mb-1">{prod.name}</h4>
+         {prod.description && ( <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> )}
+         <div className="flex items-center justify-between mt-auto">
+            <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
+            <button onClick={() => onAddToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
+              <Plus size={20}/>
+            </button>
+         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- COMPONENTE PRINCIPAL ---
 export default function App() {
   
-  // ========================================================================
-  // 🟢  DATOS DE INPERU PRODUCCIONES
-  // ========================================================================
-  
+  // CONSTANTES
   const LOGO_URL = "https://i.ibb.co/99Fcyfcj/LOGO-INPERU-PRODUCCIONES.png"; 
-  const APP_URL = window.location.origin; 
+  const APP_URL = typeof window !== 'undefined' ? window.location.origin : ''; 
 
   const LINKS = {
     ceci: "5492804547014",
@@ -90,41 +121,42 @@ export default function App() {
 
   const getWaLink = (phone, text) => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
-  // ========================================================================
-
+  // ESTADOS
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [view, setView] = useState('home'); 
   const [adminTab, setAdminTab] = useState('orders'); 
   
-  // Datos
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   
-  // UI
   const [searchQuery, setSearchQuery] = useState('');
   const [foundOrders, setFoundOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [enlargedImage, setEnlargedImage] = useState(null);
 
-  // CARRITO DE COMPRAS (CLIENTE)
+  // Carrito & Wizard
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [clientNameForCart, setClientNameForCart] = useState('');
+  const [wizardState, setWizardState] = useState(null);
 
-  // Forms Admin
+  // Admin Forms
   const [newOrderId, setNewOrderId] = useState('');
   const [newOrderName, setNewOrderName] = useState('');
   const [newOrderPhone, setNewOrderPhone] = useState('');
   const [newOrderSocial, setNewOrderSocial] = useState('');
   const [newOrderDeposit, setNewOrderDeposit] = useState(''); 
+  
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
-  const [prodImages, setProdImages] = useState('');
+  const [prodImages, setProdImages] = useState(''); 
+  const [prodDescription, setProdDescription] = useState('');
+  const [prodCustomOptions, setProdCustomOptions] = useState('');
   const [editingProductId, setEditingProductId] = useState(null); 
 
-  // Cotizador Admin
+  // Admin Cotizador
   const [orderItems, setOrderItems] = useState([]); 
   const [selectedProduct, setSelectedProduct] = useState('custom');
   const [quantity, setQuantity] = useState(1);
@@ -134,7 +166,7 @@ export default function App() {
   const [customerHistory, setCustomerHistory] = useState({ count: 0, isVip: false });
   const [adminPass, setAdminPass] = useState('');
 
-  // Auth & Data
+  // --- EFECTOS ---
   useEffect(() => {
     const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
     initAuth();
@@ -157,7 +189,6 @@ export default function App() {
     return () => { unsubOrders(); unsubProducts(); };
   }, [user]);
 
-  // Logic Admin
   useEffect(() => {
     if (view === 'admin_panel' && !newOrderId) {
       const maxId = orders.reduce((max, o) => { const num = parseInt(o.orderId); return !isNaN(num) && num > max ? num : max; }, 99); 
@@ -191,53 +222,131 @@ export default function App() {
     return { totalRevenue, totalPending };
   }, [orders]);
 
-  // --- FUNCIONES CARRITO CLIENTE ---
-  const addToCart = (prod) => {
-    const existing = cart.find(item => item.id === prod.id);
-    if (existing) {
-      setCart(cart.map(item => item.id === prod.id ? { ...item, qty: item.qty + 1 } : item));
+  // --- UTILIDADES ---
+  const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
+  
+  // 🔥 ESTA ES LA FUNCION QUE FALTABA 🔥
+  const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
+
+  const parseWizardSteps = (text) => {
+    if (!text) return [];
+    const blocks = text.split(/\n\s*\n/); 
+    return blocks.map(block => {
+      const lines = block.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length === 0) return null;
+      const header = lines[0];
+      const priceMatch = header.match(/\(\+(\d+)\)/); 
+      const price = priceMatch ? parseInt(priceMatch[1]) : 0;
+      const title = header.replace(/\(\+\d+\)/, '').trim(); 
+      let options = [];
+      if (lines.length > 1) {
+         const optionsLine = lines.slice(1).join(','); 
+         options = optionsLine.split(',').map(o => o.trim()).filter(o => o);
+      }
+      return { title, price, options };
+    }).filter(step => step !== null);
+  };
+
+  // --- LOGICA WIZARD ---
+  const startWizard = (prod) => {
+    const steps = parseWizardSteps(prod.customOptions);
+    if (steps.length > 0) {
+      setWizardState({ product: prod, steps: steps, currentStepIndex: 0, selections: {}, totalExtraCost: 0, showOptions: false });
     } else {
-      setCart([...cart, { ...prod, qty: 1 }]);
+      addToCart(prod, 0, {}); 
     }
+  };
+
+  const handleWizardAction = (action, value = null) => {
+    if (!wizardState) return;
+
+    const currentStep = wizardState.steps[wizardState.currentStepIndex];
+    let nextSelections = { ...wizardState.selections };
+    let nextExtraCost = wizardState.totalExtraCost;
+    let shouldAdvance = false;
+
+    if (action === 'YES_CUSTOMIZE') {
+      setWizardState(prev => ({ ...prev, showOptions: true }));
+      return; 
+    } 
+    else if (action === 'NO_SKIP') {
+      nextSelections[currentStep.title] = "Estándar (Sin cargo)";
+      shouldAdvance = true;
+    }
+    else if (action === 'SELECT_OPTION') {
+      nextSelections[currentStep.title] = value;
+      nextExtraCost += currentStep.price; 
+      shouldAdvance = true;
+    }
+
+    if (shouldAdvance) {
+      if (wizardState.currentStepIndex < wizardState.steps.length - 1) {
+        setWizardState(prev => ({ 
+          ...prev, 
+          currentStepIndex: prev.currentStepIndex + 1, 
+          selections: nextSelections,
+          totalExtraCost: nextExtraCost,
+          showOptions: false
+        }));
+      } else {
+        addToCart(wizardState.product, nextExtraCost, nextSelections);
+        setWizardState(null);
+      }
+    }
+  };
+
+  const addToCart = (prod, extraCost, selectedOpts) => {
+    const finalPrice = prod.price + extraCost;
+    const optionsString = Object.entries(selectedOpts).map(([k, v]) => `${k}: ${v}`).join(' | ');
+    const cartItemId = `${prod.id}-${optionsString}-${finalPrice}-${Date.now()}`; 
+    setCart(prev => [...prev, { ...prod, price: finalPrice, qty: 1, selectedOptions: optionsString, cartItemId }]);
     showNotification("Agregado al carrito");
     setIsCartOpen(true);
   };
 
-  const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
-  const updateCartQty = (id, delta) => {
-    setCart(cart.map(item => {
-      if (item.id === id) {
-        const newQty = Math.max(1, item.qty + delta);
-        return { ...item, qty: newQty };
-      }
-      return item;
-    }));
+  const removeFromCart = (cartItemId) => setCart(cart.filter(item => item.cartItemId !== cartItemId));
+  const updateCartQty = (cartItemId, delta) => {
+    setCart(cart.map(item => item.cartItemId === cartItemId ? { ...item, qty: Math.max(1, item.qty + delta) } : item));
   };
 
   const cartTotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
 
   const sendCartToWhatsapp = () => {
     if (cart.length === 0) return;
-    
-    // VALIDACION DE NOMBRE OBLIGATORIO
-    if (!clientNameForCart.trim()) {
-      showNotification("Por favor, ingresa tu nombre para continuar", "error");
-      return;
-    }
-
+    if (!clientNameForCart.trim()) { showNotification("Por favor, ingresa tu nombre", "error"); return; }
     let message = `Hola INPERU PRODUCCIONES! Soy *${clientNameForCart}*.\nQuiero hacer el siguiente pedido:\n\n`;
     cart.forEach(item => {
-      message += `${item.qty} x ${item.name} ($${(item.price * item.qty).toLocaleString()})\n`;
+      message += `▪️ ${item.qty} x ${item.name}`;
+      if (item.selectedOptions) message += `\n   L ${item.selectedOptions}`;
+      message += `\n   L $${(item.price * item.qty).toLocaleString()}\n`;
     });
     message += `\n*Total Estimado: $${cartTotal.toLocaleString()}*\n\nQuedo a la espera asi avanzamos con el pedido. Gracias!`;
-    
     window.open(`https://wa.me/${LINKS.dani}?text=${encodeURIComponent(message)}`, '_blank');
-    setCart([]);
-    setIsCartOpen(false);
-    setClientNameForCart('');
+    setCart([]); setIsCartOpen(false); setClientNameForCart('');
   };
 
   // --- FUNCIONES ADMIN ---
+  const handleSaveProduct = async () => {
+    if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
+    const imageUrls = prodImages.split('\n').map(url => url.trim()).filter(url => url !== '');
+    const mainImageUrl = imageUrls.length > 0 ? imageUrls[0] : 'https://via.placeholder.com/150?text=Sin+Foto';
+    const productData = { name: prodName, description: prodDescription, customOptions: prodCustomOptions, price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() };
+    try {
+      if (editingProductId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), productData); showNotification("Producto actualizado"); } 
+      else { productData.createdAt = serverTimestamp(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData); showNotification("Producto agregado"); }
+      setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setEditingProductId(null);
+    } catch (err) { showNotification("Error al guardar", "error"); }
+  };
+
+  const handleEditProduct = (prod) => { 
+    setProdName(prod.name); setProdPrice(prod.price); setProdImages(prod.imageUrls ? prod.imageUrls.join('\n') : prod.imageUrl); 
+    setProdDescription(prod.description || ''); setProdCustomOptions(prod.customOptions || ''); 
+    setEditingProductId(prod.id); window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setEditingProductId(null); };
+  const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
+
+  // --- OTROS HANDLERS ADMIN ---
   const handleAddItem = () => {
     let prodName = 'Personalizado';
     if (selectedProduct !== 'custom') { const p = products.find(x => x.id === selectedProduct); if (p) prodName = p.name; }
@@ -245,31 +354,13 @@ export default function App() {
     setCustomDescription(''); setQuantity(1); showNotification("Item agregado");
   };
   const handleRemoveItem = (id) => setOrderItems(orderItems.filter(i => i.id !== id));
-  const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
-  const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
-
-  const handleSaveProduct = async () => {
-    if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
-    const imageUrls = prodImages.split('\n').map(url => url.trim()).filter(url => url !== '');
-    const mainImageUrl = imageUrls.length > 0 ? imageUrls[0] : 'https://via.placeholder.com/150?text=Sin+Foto';
-    const productData = { name: prodName, price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() };
-    try {
-      if (editingProductId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), productData); showNotification("Producto actualizado"); } 
-      else { productData.createdAt = serverTimestamp(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData); showNotification("Producto agregado"); }
-      setProdName(''); setProdPrice(''); setProdImages(''); setEditingProductId(null);
-    } catch (err) { showNotification("Error al guardar", "error"); }
-  };
-
-  const handleEditProduct = (prod) => { setProdName(prod.name); setProdPrice(prod.price); setProdImages(prod.imageUrls ? prod.imageUrls.join('\n') : prod.imageUrl); setEditingProductId(prod.id); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setEditingProductId(null); };
-  const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
 
   const handleCreateOrder = async () => {
     if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos", "error");
-    const total = calculateGrandTotal(); const deposit = parseFloat(newOrderDeposit) || 0;
+    const total = calculateGrandTotal(); 
+    const deposit = parseFloat(newOrderDeposit) || 0;
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), {
-      clientName: newOrderName, orderId: newOrderId, description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '),
-      items: orderItems, totalPrice: total, deposit: deposit, phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      clientName: newOrderName, orderId: newOrderId, description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '), items: orderItems, totalPrice: total, deposit: deposit, phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
     setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1); showNotification("Pedido creado");
   };
@@ -278,14 +369,12 @@ export default function App() {
   const markAsPaid = async (order) => { if(window.confirm("¿Marcar como pagado?")) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { deposit: order.totalPrice, updatedAt: serverTimestamp() }); };
   const deleteOrder = async (id) => { if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
   const addFinishedPhoto = async (order) => { const url = prompt("Pega el link de la foto:"); if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); } };
-  
   const sendWhatsAppMessage = (order) => {
     if (!order.phone) return showNotification("Sin teléfono", "error");
     const statusText = statusConfig[order.status]?.label || "Actualizado";
     const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle aquí: ${APP_URL}\n\n¡Muchas gracias!`;
     window.open(`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
   };
-
   const handleAdminLogin = (e) => { e.preventDefault(); if (adminPass === 'Luisana1510++') { setIsAdmin(true); setView('admin_panel'); setAdminPass(''); showNotification("¡Bienvenida!"); } else { showNotification("Clave incorrecta", "error"); } };
   const handleSearch = (e) => { e.preventDefault(); setLoading(true); setTimeout(() => {
       const res = orders.filter(o => (o.phone?.replace(/\D/g,'').includes(searchQuery.replace(/\D/g,''))) || o.orderId.toLowerCase() === searchQuery.toLowerCase() || o.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -300,49 +389,82 @@ export default function App() {
     delivered: { label: 'Entregado', color: 'bg-slate-800 text-white', icon: Package, progress: 100 },
   };
 
-  // COMPONENTE TARJETA DE PRODUCTO PUBLICO
-  const ProductCardPublic = ({ prod }) => {
-    const [currentImg, setCurrentImg] = useState(prod.imageUrl);
-    const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
-
-    return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
-        <div className="p-3 pb-0">
-           <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => setEnlargedImage(currentImg)}>
-              <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
-           </div>
-           {images.length > 1 && (
-             <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
-               {images.map((img, idx) => (
-                 <button key={idx} onClick={() => setCurrentImg(img)} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
-                   <img src={img} className="w-full h-full object-cover"/>
-                 </button>
-               ))}
-             </div>
-           )}
-        </div>
-        <div className="p-4 flex-1 flex flex-col">
-           <h4 className="font-bold text-slate-800 text-sm mb-1 flex-1 line-clamp-2">{prod.name}</h4>
-           <div className="flex items-center justify-between mt-3">
-              <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
-              <button onClick={() => addToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
-                <Plus size={20}/>
-              </button>
-           </div>
-        </div>
-      </div>
-    );
-  };
-
-  // --- RENDERIZADO ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> {/* Padding bottom extra para el carrito flotante */}
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> 
       
-      {/* MODAL IMAGEN */}
       {enlargedImage && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEnlargedImage(null)}>
           <button className="absolute top-4 right-4 text-white p-2 rounded-full bg-white/10 hover:bg-white/20"><X size={32}/></button>
           <img src={enlargedImage} alt="Grande" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"/>
+        </div>
+      )}
+
+      {/* --- WIZARD MODAL (PASO A PASO) --- */}
+      {wizardState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-xl text-teal-900">{wizardState.product.name}</h3>
+              <button onClick={() => setWizardState(null)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+            </div>
+
+            <div className="mb-6">
+               <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-bold text-teal-600 uppercase tracking-wider bg-teal-50 px-2 py-1 rounded">Paso {wizardState.currentStepIndex + 1} de {wizardState.steps.length}</span>
+               </div>
+               
+               <h4 className="text-xl font-bold text-slate-800 mb-4 text-center">{wizardState.steps[wizardState.currentStepIndex].title}</h4>
+               
+               {wizardState.showOptions || wizardState.steps[wizardState.currentStepIndex].price === 0 ? (
+                  <div>
+                    <p className="text-sm text-slate-500 mb-3 text-center">Elige una opción:</p>
+                    <div className="grid grid-cols-2 gap-3 max-h-[40vh] overflow-y-auto">
+                        {wizardState.steps[wizardState.currentStepIndex].options.map((opt, idx) => (
+                          <button 
+                            key={idx}
+                            onClick={() => handleWizardAction('SELECT_OPTION', opt)}
+                            className="p-3 rounded-xl border-2 border-teal-100 bg-teal-50 text-teal-800 font-bold hover:bg-teal-100 hover:border-teal-300 transition text-center shadow-sm"
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+               ) : (
+                  <div className="text-center">
+                     <div className="bg-green-50 border border-green-100 p-4 rounded-2xl mb-6">
+                        <p className="text-green-800 font-medium mb-1">¿Te gustaría personalizarlo?</p>
+                        <p className="text-2xl font-bold text-green-600">+${wizardState.steps[wizardState.currentStepIndex].price}</p>
+                     </div>
+                     
+                     <div className="flex flex-col gap-3">
+                        <button 
+                          onClick={() => handleWizardAction('YES_CUSTOMIZE')}
+                          className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold hover:bg-teal-700 transition shadow-lg shadow-teal-200 flex items-center justify-center gap-2"
+                        >
+                          SÍ, quiero elegir <ArrowRight size={18}/>
+                        </button>
+                        <button 
+                          onClick={() => handleWizardAction('NO_SKIP')}
+                          className="w-full bg-white border-2 border-slate-100 text-slate-400 py-3 rounded-xl font-medium hover:border-slate-300 hover:text-slate-600 transition"
+                        >
+                          NO, prefiero la opción estándar
+                        </button>
+                     </div>
+                     <p className="text-xs text-slate-300 mt-4 italic">*Si eliges NO, avanzaremos al siguiente paso sin costo extra.</p>
+                  </div>
+               )}
+
+            </div>
+
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex gap-1 h-1 mt-2">
+                 {wizardState.steps.map((_, idx) => (
+                   <div key={idx} className={`flex-1 rounded-full ${idx <= wizardState.currentStepIndex ? 'bg-teal-500' : 'bg-slate-200'}`}></div>
+                 ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -366,18 +488,23 @@ export default function App() {
               ) : (
                 <div className="space-y-4">
                   {cart.map(item => (
-                    <div key={item.id} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div key={item.cartItemId} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
                       <img src={item.imageUrl} className="w-16 h-16 rounded-lg object-cover bg-white"/>
                       <div className="flex-1">
                         <p className="font-bold text-sm text-slate-800 line-clamp-1">{item.name}</p>
+                        {item.selectedOptions && (
+                          <div className="text-xs text-slate-500 mb-1 bg-white p-1.5 rounded border border-slate-200">
+                            {item.selectedOptions.split('|').map((opt, i) => <div key={i}>• {opt.trim()}</div>)}
+                          </div>
+                        )}
                         <p className="text-teal-600 font-bold text-sm">${item.price.toLocaleString()}</p>
                       </div>
-                      <div className="flex items-center gap-2 bg-white rounded-lg border p-1">
-                        <button onClick={() => updateCartQty(item.id, -1)} className="p-1 hover:bg-slate-100 rounded text-slate-500"><Minus size={14}/></button>
+                      <div className="flex items-center gap-2 bg-white rounded-lg border p-1 h-8 self-start">
+                        <button onClick={() => updateCartQty(item.cartItemId, -1)} className="p-1 hover:bg-slate-100 rounded text-slate-500"><Minus size={14}/></button>
                         <span className="text-sm font-bold w-4 text-center">{item.qty}</span>
-                        <button onClick={() => updateCartQty(item.id, 1)} className="p-1 hover:bg-slate-100 rounded text-teal-600"><Plus size={14}/></button>
+                        <button onClick={() => updateCartQty(item.cartItemId, 1)} className="p-1 hover:bg-slate-100 rounded text-teal-600"><Plus size={14}/></button>
                       </div>
-                      <button onClick={() => removeFromCart(item.id)} className="text-red-400 p-2"><Trash2 size={16}/></button>
+                      <button onClick={() => removeFromCart(item.cartItemId)} className="text-red-400 p-2 self-start"><Trash2 size={16}/></button>
                     </div>
                   ))}
                 </div>
@@ -405,14 +532,13 @@ export default function App() {
         </div>
       )}
 
-      <header className="bg-white shadow-sm sticky top-0 z-10 border-b border-teal-50">
+      <header className="bg-white shadow-sm sticky top-0 z-50 border-b border-teal-50">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setView('home'); setFoundOrders([]); setSearchQuery('');}}>
             <img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" />
             <h1 className="font-bold text-xl text-teal-800 tracking-tight">INPERU <span className="text-teal-600 font-normal">PRODUCCIONES</span></h1>
           </div>
           <div className="flex items-center gap-2">
-            {/* Botón Carrito Header */}
             <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-teal-700 hover:bg-teal-50 rounded-full transition">
               <ShoppingCart size={20}/>
               {cart.length > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{cart.length}</span>}
@@ -424,7 +550,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 py-8 relative z-0">
         {notification && (
           <div className={`fixed top-20 right-4 px-4 py-3 rounded-lg shadow-lg border-l-4 z-50 ${notification.type === 'error' ? 'bg-white border-red-500 text-red-600' : 'bg-white border-teal-500 text-teal-700'}`}>
             <p className="font-medium text-sm">{notification.msg}</p>
@@ -433,7 +559,6 @@ export default function App() {
 
         {view === 'home' && (
           <div className="animate-in fade-in zoom-in duration-500">
-            {/* BUSCADOR DE PEDIDOS */}
             <div className="w-full bg-white rounded-3xl shadow-xl shadow-teal-50/50 p-8 text-center border border-teal-50 relative overflow-hidden mb-12">
               <div className="mb-6 relative z-10">
                 <div className="w-32 h-32 mx-auto bg-white rounded-full shadow-md p-1 flex items-center justify-center border-4 border-teal-50">
@@ -455,7 +580,6 @@ export default function App() {
               </form>
             </div>
 
-            {/* CATÁLOGO PUBLICO */}
             <div className="mb-16">
                 <div className="flex items-center gap-4 mb-8">
                   <div className="h-px bg-slate-200 flex-1"></div>
@@ -468,24 +592,23 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {products.map(prod => (
-                      <ProductCardPublic key={prod.id} prod={prod} />
+                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
                     ))}
                   </div>
                 )}
             </div>
               
-            {/* FOOTER HOME */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-50 text-center">
                  <h3 className="text-xs font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
                  <div className="flex justify-center gap-4 mb-6">
-                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={24}/></a>
-                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={24}/></a>
+                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={20}/></a>
+                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con CECI
                     </a>
-                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con DANI
                     </a>
                  </div>
@@ -542,17 +665,15 @@ export default function App() {
                 </div>
              )})}
 
-             {/* SECCION PRODUCTOS DESTACADOS (NUEVO DISEÑO) */}
              <div className="mt-12 mb-12">
                 <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-lg font-bold text-teal-900">Nuestros Productos</h3><div className="h-px bg-slate-200 flex-1"></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {products.map(prod => (
-                    <ProductCardPublic key={prod.id} prod={prod} />
+                    <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
                   ))}
                 </div>
              </div>
 
-             {/* FOOTER CONTACTO */}
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-50 text-center">
                  <h3 className="text-sm font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
                  <div className="flex justify-center gap-4 mb-6">
@@ -563,7 +684,7 @@ export default function App() {
                     <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
                         Hablar con CECI
                     </a>
-                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con DANI
                     </a>
                  </div>
@@ -600,6 +721,24 @@ export default function App() {
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                      <input placeholder="Nombre" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodName} onChange={(e)=>setProdName(e.target.value)}/>
                      <input type="number" placeholder="Precio" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodPrice} onChange={(e)=>setProdPrice(e.target.value)}/>
+                     
+                     <div className="md:col-span-2">
+                       <label className="text-xs text-slate-500 font-bold ml-1 mb-1 flex items-center gap-1"><Settings2 size={12}/> Opciones de Personalización (Paso a Paso)</label>
+                       <p className="text-[10px] text-slate-400 mb-2 ml-1">Escribe bloques separados por doble ENTER. Formato: Título (+Precio Extra) y abajo las opciones.</p>
+                       <textarea 
+                         placeholder="Ejemplo:&#10;Color de Esferas (+100)&#10;Blanca, Verde, Roja&#10;&#10;Caja Personalizada (+300)&#10;Stitch, Grinch" 
+                         className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400 h-40 resize-y font-mono text-sm" 
+                         value={prodCustomOptions} 
+                         onChange={(e)=>setProdCustomOptions(e.target.value)}
+                       />
+                     </div>
+
+                     <textarea 
+                       placeholder="Descripción del producto (lo que trae, medidas, etc.)" 
+                       className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400 h-20 resize-y" 
+                       value={prodDescription} 
+                       onChange={(e)=>setProdDescription(e.target.value)}
+                     />
                      <textarea 
                        placeholder="URLs de Imágenes (una por línea). La primera será la principal." 
                        className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400 h-24 resize-y" 
