@@ -52,7 +52,9 @@ import {
   Camera, 
   Send,   
   Pencil, 
-  Save    
+  Save,
+  Images,
+  Minus
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -65,13 +67,11 @@ const firebaseConfig = {
   appId: "1:449560896456:web:04df3b5f2a742b9360d6fd"
 };
 
-// --- Inicialización ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "inperu-web"; 
 
-// --- COMPONENTE PRINCIPAL ---
 export default function App() {
   
   // ========================================================================
@@ -81,7 +81,6 @@ export default function App() {
   const LOGO_URL = "https://i.ibb.co/99Fcyfcj/LOGO-INPERU-PRODUCCIONES.png"; 
   const APP_URL = window.location.origin; 
 
-  // NUMEROS Y REDES
   const LINKS = {
     ceci: "5492804547014",
     dani: "5492974177629", 
@@ -89,7 +88,6 @@ export default function App() {
     instagram: "https://www.instagram.com/inperuproducciones?igsh=MXZuaG5yaHQ0Y3Z6cQ=="
   };
 
-  // Función para generar link de WhatsApp con mensaje
   const getWaLink = (phone, text) => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
   // ========================================================================
@@ -103,47 +101,47 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   
-  // Buscador y Estados UI
+  // UI
   const [searchQuery, setSearchQuery] = useState('');
   const [foundOrders, setFoundOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [enlargedImage, setEnlargedImage] = useState(null);
 
-  // Formularios Pedido
+  // CARRITO DE COMPRAS (CLIENTE)
+  const [cart, setCart] = useState([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [clientNameForCart, setClientNameForCart] = useState('');
+
+  // Forms Admin
   const [newOrderId, setNewOrderId] = useState('');
   const [newOrderName, setNewOrderName] = useState('');
   const [newOrderPhone, setNewOrderPhone] = useState('');
   const [newOrderSocial, setNewOrderSocial] = useState('');
   const [newOrderDeposit, setNewOrderDeposit] = useState(''); 
-  
-  // Formulario Producto (Creación y Edición)
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
-  const [prodImage, setProdImage] = useState('');
+  const [prodImages, setProdImages] = useState('');
   const [editingProductId, setEditingProductId] = useState(null); 
 
-  // Cotizador
+  // Cotizador Admin
   const [orderItems, setOrderItems] = useState([]); 
   const [selectedProduct, setSelectedProduct] = useState('custom');
   const [quantity, setQuantity] = useState(1);
   const [unitPrice, setUnitPrice] = useState(0);
   const [customDescription, setCustomDescription] = useState('');
   
-  // Inteligencia Cliente
   const [customerHistory, setCustomerHistory] = useState({ count: 0, isVip: false });
   const [adminPass, setAdminPass] = useState('');
 
-  // Autenticación
+  // Auth & Data
   useEffect(() => {
-    const initAuth = async () => {
-        try { await signInAnonymously(auth); } catch (e) { console.error(e); }
-    };
+    const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) { console.error(e); } };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsubscribe();
   }, []);
 
-  // Cargar Datos
   useEffect(() => {
     if (!user) return;
     const unsubOrders = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'orders')), (s) => {
@@ -159,29 +157,21 @@ export default function App() {
     return () => { unsubOrders(); unsubProducts(); };
   }, [user]);
 
-  // Autogenerar ID
+  // Logic Admin
   useEffect(() => {
     if (view === 'admin_panel' && !newOrderId) {
-      const maxId = orders.reduce((max, o) => {
-        const num = parseInt(o.orderId); return !isNaN(num) && num > max ? num : max;
-      }, 99); 
+      const maxId = orders.reduce((max, o) => { const num = parseInt(o.orderId); return !isNaN(num) && num > max ? num : max; }, 99); 
       setNewOrderId((maxId + 1).toString());
     }
   }, [orders, view, newOrderId]);
 
-  // Detector Cliente
   useEffect(() => {
     if (newOrderPhone.length > 6) {
       const past = orders.filter(o => o.phone && o.phone.includes(newOrderPhone));
       const count = past.length;
-      const nextPurchaseNumber = count + 1;
-      const isVipMoment = nextPurchaseNumber > 0 && nextPurchaseNumber % 5 === 0;
+      const isVipMoment = (count + 1) % 5 === 0 && (count + 1) > 0;
       setCustomerHistory({ count, isVip: isVipMoment });
-      if (count > 0 && !newOrderName) {
-        setNewOrderName(past[0].clientName);
-        setNewOrderSocial(past[0].social || '');
-        showNotification(`¡Cliente frecuente! (${count} compras)`, 'success');
-      }
+      if (count > 0 && !newOrderName) { setNewOrderName(past[0].clientName); setNewOrderSocial(past[0].social || ''); showNotification(`¡Cliente frecuente! (${count} compras)`, 'success'); }
     } else { setCustomerHistory({ count: 0, isVip: false }); }
   }, [newOrderPhone, orders]);
 
@@ -192,109 +182,114 @@ export default function App() {
     }
   }, [selectedProduct, products]);
 
-  // Cálculos
   const financials = useMemo(() => {
     let totalRevenue = 0; let totalPending = 0; 
     orders.forEach(o => {
       const balance = Math.max(0, (o.totalPrice || 0) - (o.deposit || 0));
-      totalRevenue += (o.deposit || 0);
-      totalPending += balance;
+      totalRevenue += (o.deposit || 0); totalPending += balance;
     });
     return { totalRevenue, totalPending };
   }, [orders]);
 
-  // Funciones Auxiliares
-  const handleAddItem = () => {
-    let prodName = 'Personalizado';
-    if (selectedProduct !== 'custom') {
-      const p = products.find(x => x.id === selectedProduct);
-      if (p) prodName = p.name;
+  // --- FUNCIONES CARRITO CLIENTE ---
+  const addToCart = (prod) => {
+    const existing = cart.find(item => item.id === prod.id);
+    if (existing) {
+      setCart(cart.map(item => item.id === prod.id ? { ...item, qty: item.qty + 1 } : item));
+    } else {
+      setCart([...cart, { ...prod, qty: 1 }]);
     }
-    setOrderItems([...orderItems, { id: Date.now(), name: prodName, description: customDescription, quantity, unitPrice, subtotal: quantity * unitPrice }]);
-    setCustomDescription(''); setQuantity(1);
-    showNotification("Item agregado");
+    showNotification("Agregado al carrito");
+    setIsCartOpen(true);
   };
 
+  const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
+  const updateCartQty = (id, delta) => {
+    setCart(cart.map(item => {
+      if (item.id === id) {
+        const newQty = Math.max(1, item.qty + delta);
+        return { ...item, qty: newQty };
+      }
+      return item;
+    }));
+  };
+
+  const cartTotal = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+
+  const sendCartToWhatsapp = () => {
+    if (cart.length === 0) return;
+    
+    // VALIDACION DE NOMBRE OBLIGATORIO
+    if (!clientNameForCart.trim()) {
+      showNotification("Por favor, ingresa tu nombre para continuar", "error");
+      return;
+    }
+
+    let message = `Hola INPERU PRODUCCIONES! Soy *${clientNameForCart}*.\nQuiero hacer el siguiente pedido:\n\n`;
+    cart.forEach(item => {
+      message += `${item.qty} x ${item.name} ($${(item.price * item.qty).toLocaleString()})\n`;
+    });
+    message += `\n*Total Estimado: $${cartTotal.toLocaleString()}*\n\nQuedo a la espera asi avanzamos con el pedido. Gracias!`;
+    
+    window.open(`https://wa.me/${LINKS.dani}?text=${encodeURIComponent(message)}`, '_blank');
+    setCart([]);
+    setIsCartOpen(false);
+    setClientNameForCart('');
+  };
+
+  // --- FUNCIONES ADMIN ---
+  const handleAddItem = () => {
+    let prodName = 'Personalizado';
+    if (selectedProduct !== 'custom') { const p = products.find(x => x.id === selectedProduct); if (p) prodName = p.name; }
+    setOrderItems([...orderItems, { id: Date.now(), name: prodName, description: customDescription, quantity, unitPrice, subtotal: quantity * unitPrice }]);
+    setCustomDescription(''); setQuantity(1); showNotification("Item agregado");
+  };
   const handleRemoveItem = (id) => setOrderItems(orderItems.filter(i => i.id !== id));
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
-  // CRUD PRODUCTOS
   const handleSaveProduct = async () => {
     if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
-    const imageToUse = prodImage || 'https://via.placeholder.com/150?text=Sin+Foto';
+    const imageUrls = prodImages.split('\n').map(url => url.trim()).filter(url => url !== '');
+    const mainImageUrl = imageUrls.length > 0 ? imageUrls[0] : 'https://via.placeholder.com/150?text=Sin+Foto';
+    const productData = { name: prodName, price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() };
     try {
-      if (editingProductId) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), {
-          name: prodName, price: parseFloat(prodPrice), imageUrl: imageToUse, updatedAt: serverTimestamp()
-        });
-        showNotification("Producto actualizado");
-      } else {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
-          name: prodName, price: parseFloat(prodPrice), imageUrl: imageToUse, category: 'Papelería', createdAt: serverTimestamp()
-        });
-        showNotification("Producto agregado");
-      }
-      setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null);
+      if (editingProductId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), productData); showNotification("Producto actualizado"); } 
+      else { productData.createdAt = serverTimestamp(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData); showNotification("Producto agregado"); }
+      setProdName(''); setProdPrice(''); setProdImages(''); setEditingProductId(null);
     } catch (err) { showNotification("Error al guardar", "error"); }
   };
 
-  const handleEditProduct = (prod) => {
-    setProdName(prod.name); setProdPrice(prod.price); setProdImage(prod.imageUrl); setEditingProductId(prod.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImage(''); setEditingProductId(null); };
+  const handleEditProduct = (prod) => { setProdName(prod.name); setProdPrice(prod.price); setProdImages(prod.imageUrls ? prod.imageUrls.join('\n') : prod.imageUrl); setEditingProductId(prod.id); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setEditingProductId(null); };
   const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
 
-  // CRUD PEDIDOS
   const handleCreateOrder = async () => {
-    if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos o items", "error");
-    const total = calculateGrandTotal();
-    const deposit = parseFloat(newOrderDeposit) || 0;
-    if (deposit > total) return showNotification("Seña mayor al total", "error");
-
+    if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos", "error");
+    const total = calculateGrandTotal(); const deposit = parseFloat(newOrderDeposit) || 0;
     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), {
-      clientName: newOrderName, orderId: newOrderId,
-      description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '),
-      items: orderItems, totalPrice: total, deposit: deposit,
-      phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', 
-      createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      clientName: newOrderName, orderId: newOrderId, description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '),
+      items: orderItems, totalPrice: total, deposit: deposit, phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     });
-    setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1);
-    showNotification("Pedido creado");
+    setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1); showNotification("Pedido creado");
   };
-
+  
   const updateStatus = async (id, status) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status, updatedAt: serverTimestamp() }); };
   const markAsPaid = async (order) => { if(window.confirm("¿Marcar como pagado?")) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { deposit: order.totalPrice, updatedAt: serverTimestamp() }); };
   const deleteOrder = async (id) => { if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
+  const addFinishedPhoto = async (order) => { const url = prompt("Pega el link de la foto:"); if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); } };
   
-  const addFinishedPhoto = async (order) => {
-    const url = prompt("Pega aquí el link de la foto del producto terminado:");
-    if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); }
-  };
-
   const sendWhatsAppMessage = (order) => {
-    if (!order.phone) return showNotification("El pedido no tiene teléfono", "error");
+    if (!order.phone) return showNotification("Sin teléfono", "error");
     const statusText = statusConfig[order.status]?.label || "Actualizado";
-    const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle y fotos aquí: ${APP_URL}\n\n¡Muchas gracias!`;
+    const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle aquí: ${APP_URL}\n\n¡Muchas gracias!`;
     window.open(`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const handleAdminLogin = (e) => {
-    e.preventDefault();
-    if (adminPass === 'Luisana1510++') { setIsAdmin(true); setView('admin_panel'); setAdminPass(''); showNotification("¡Bienvenida!"); } 
-    else { showNotification("Clave incorrecta", "error"); }
-  };
-
-  const handleSearch = (e) => {
-    e.preventDefault(); setLoading(true);
-    setTimeout(() => {
+  const handleAdminLogin = (e) => { e.preventDefault(); if (adminPass === 'Luisana1510++') { setIsAdmin(true); setView('admin_panel'); setAdminPass(''); showNotification("¡Bienvenida!"); } else { showNotification("Clave incorrecta", "error"); } };
+  const handleSearch = (e) => { e.preventDefault(); setLoading(true); setTimeout(() => {
       const res = orders.filter(o => (o.phone?.replace(/\D/g,'').includes(searchQuery.replace(/\D/g,''))) || o.orderId.toLowerCase() === searchQuery.toLowerCase() || o.clientName.toLowerCase().includes(searchQuery.toLowerCase()));
-      if (res.length > 0) { setFoundOrders(res); setView('search_result'); } else { showNotification("No encontrado", "error"); }
-      setLoading(false);
-    }, 600);
-  };
+      if (res.length > 0) { setFoundOrders(res); setView('search_result'); } else { showNotification("No encontrado", "error"); } setLoading(false); }, 600); };
 
   const statusConfig = {
     received: { label: 'Recibido', color: 'bg-slate-100 text-slate-600', icon: Clock, progress: 10 },
@@ -305,18 +300,127 @@ export default function App() {
     delivered: { label: 'Entregado', color: 'bg-slate-800 text-white', icon: Package, progress: 100 },
   };
 
+  // COMPONENTE TARJETA DE PRODUCTO PUBLICO
+  const ProductCardPublic = ({ prod }) => {
+    const [currentImg, setCurrentImg] = useState(prod.imageUrl);
+    const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
+
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
+        <div className="p-3 pb-0">
+           <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => setEnlargedImage(currentImg)}>
+              <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
+           </div>
+           {images.length > 1 && (
+             <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+               {images.map((img, idx) => (
+                 <button key={idx} onClick={() => setCurrentImg(img)} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
+                   <img src={img} className="w-full h-full object-cover"/>
+                 </button>
+               ))}
+             </div>
+           )}
+        </div>
+        <div className="p-4 flex-1 flex flex-col">
+           <h4 className="font-bold text-slate-800 text-sm mb-1 flex-1 line-clamp-2">{prod.name}</h4>
+           <div className="flex items-center justify-between mt-3">
+              <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
+              <button onClick={() => addToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
+                <Plus size={20}/>
+              </button>
+           </div>
+        </div>
+      </div>
+    );
+  };
+
   // --- RENDERIZADO ---
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> {/* Padding bottom extra para el carrito flotante */}
+      
+      {/* MODAL IMAGEN */}
+      {enlargedImage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEnlargedImage(null)}>
+          <button className="absolute top-4 right-4 text-white p-2 rounded-full bg-white/10 hover:bg-white/20"><X size={32}/></button>
+          <img src={enlargedImage} alt="Grande" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"/>
+        </div>
+      )}
+
+      {/* MODAL CARRITO */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
+          <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center bg-teal-700 text-white">
+              <h2 className="font-bold text-lg flex items-center gap-2"><ShoppingCart/> Tu Carrito</h2>
+              <button onClick={() => setIsCartOpen(false)} className="p-1 hover:bg-white/20 rounded"><X/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <ShoppingBag size={48} className="mx-auto mb-4 opacity-20"/>
+                  <p>Tu carrito está vacío</p>
+                  <button onClick={() => setIsCartOpen(false)} className="mt-4 text-teal-600 font-bold text-sm hover:underline">Ir a ver productos</button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {cart.map(item => (
+                    <div key={item.id} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <img src={item.imageUrl} className="w-16 h-16 rounded-lg object-cover bg-white"/>
+                      <div className="flex-1">
+                        <p className="font-bold text-sm text-slate-800 line-clamp-1">{item.name}</p>
+                        <p className="text-teal-600 font-bold text-sm">${item.price.toLocaleString()}</p>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white rounded-lg border p-1">
+                        <button onClick={() => updateCartQty(item.id, -1)} className="p-1 hover:bg-slate-100 rounded text-slate-500"><Minus size={14}/></button>
+                        <span className="text-sm font-bold w-4 text-center">{item.qty}</span>
+                        <button onClick={() => updateCartQty(item.id, 1)} className="p-1 hover:bg-slate-100 rounded text-teal-600"><Plus size={14}/></button>
+                      </div>
+                      <button onClick={() => removeFromCart(item.id)} className="text-red-400 p-2"><Trash2 size={16}/></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <div className="p-4 border-t bg-slate-50">
+                <div className="flex justify-between items-end mb-4">
+                  <span className="text-slate-500">Total Estimado</span>
+                  <span className="text-2xl font-bold text-teal-800">${cartTotal.toLocaleString()}</span>
+                </div>
+                <input 
+                  placeholder="Tu Nombre (Obligatorio)" 
+                  className="w-full p-3 border rounded-xl mb-3 text-sm border-gray-300"
+                  value={clientNameForCart}
+                  onChange={(e) => setClientNameForCart(e.target.value)}
+                />
+                <button onClick={sendCartToWhatsapp} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg shadow-green-200 transition">
+                  <MessageCircle/> Pedir por WhatsApp
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <header className="bg-white shadow-sm sticky top-0 z-10 border-b border-teal-50">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setView('home'); setFoundOrders([]); setSearchQuery('');}}>
             <img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" />
             <h1 className="font-bold text-xl text-teal-800 tracking-tight">INPERU <span className="text-teal-600 font-normal">PRODUCCIONES</span></h1>
           </div>
-          <button onClick={() => isAdmin ? setView('home') : setView('admin_login')} className="text-slate-400 hover:text-teal-600 transition p-2">
-            {isAdmin ? <LogOut size={16}/> : <Lock size={16}/>}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Botón Carrito Header */}
+            <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-teal-700 hover:bg-teal-50 rounded-full transition">
+              <ShoppingCart size={20}/>
+              {cart.length > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{cart.length}</span>}
+            </button>
+            <button onClick={() => isAdmin ? setView('home') : setView('admin_login')} className="text-slate-400 hover:text-teal-600 transition p-2">
+              {isAdmin ? <LogOut size={16}/> : <Lock size={16}/>}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -328,16 +432,17 @@ export default function App() {
         )}
 
         {view === 'home' && (
-          <div className="flex flex-col items-center justify-center py-8 animate-in fade-in zoom-in duration-500">
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-teal-50/50 p-8 text-center border border-teal-50 relative overflow-hidden">
-              <div className="mb-8 relative z-10">
-                <div className="w-40 h-40 mx-auto bg-white rounded-full shadow-md p-1 flex items-center justify-center border-4 border-teal-50">
+          <div className="animate-in fade-in zoom-in duration-500">
+            {/* BUSCADOR DE PEDIDOS */}
+            <div className="w-full bg-white rounded-3xl shadow-xl shadow-teal-50/50 p-8 text-center border border-teal-50 relative overflow-hidden mb-12">
+              <div className="mb-6 relative z-10">
+                <div className="w-32 h-32 mx-auto bg-white rounded-full shadow-md p-1 flex items-center justify-center border-4 border-teal-50">
                    <img src={LOGO_URL} alt="Logo" className="w-full h-full object-contain rounded-full"/>
                 </div>
               </div>
               <h2 className="text-2xl font-bold mb-2 text-teal-900">Seguimiento de Pedidos</h2>
-              <p className="text-slate-500 mb-8 text-sm">Ingresa tu número de teléfono para ver el estado.</p>
-              <form onSubmit={handleSearch} className="relative z-10">
+              <p className="text-slate-500 mb-6 text-sm">Ingresa tu número de teléfono para ver el estado.</p>
+              <form onSubmit={handleSearch} className="relative z-10 max-w-sm mx-auto">
                 <input 
                   type="text" placeholder="Tu teléfono o número de pedido"
                   className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all text-slate-700 shadow-sm"
@@ -348,23 +453,42 @@ export default function App() {
                   {loading ? 'Buscando...' : 'Consultar Estado'}
                 </button>
               </form>
+            </div>
+
+            {/* CATÁLOGO PUBLICO */}
+            <div className="mb-16">
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="h-px bg-slate-200 flex-1"></div>
+                  <h3 className="text-xl font-bold text-teal-900 flex items-center gap-2"><ShoppingBag size={20}/> Catálogo Digital</h3>
+                  <div className="h-px bg-slate-200 flex-1"></div>
+                </div>
+                
+                {products.length === 0 ? (
+                  <p className="text-center text-slate-400">Cargando productos...</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {products.map(prod => (
+                      <ProductCardPublic key={prod.id} prod={prod} />
+                    ))}
+                  </div>
+                )}
+            </div>
               
-              {/* FOOTER HOME */}
-              <div className="mt-12 pt-6 border-t border-slate-100">
+            {/* FOOTER HOME */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-50 text-center">
                  <h3 className="text-xs font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
-                 <div className="flex justify-center gap-3 mb-6">
-                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 hover:scale-110 transition"><Facebook size={24}/></a>
-                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 hover:scale-110 transition"><Instagram size={24}/></a>
+                 <div className="flex justify-center gap-4 mb-6">
+                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={24}/></a>
+                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={24}/></a>
                  </div>
-                 <div className="flex flex-col gap-3">
+                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
-                        <MessageCircle size={20}/> Hablar con CECI
+                        Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
-                        <MessageCircle size={20}/> Hablar con DANI
+                        Hablar con DANI
                     </a>
                  </div>
-              </div>
             </div>
           </div>
         )}
@@ -393,7 +517,7 @@ export default function App() {
 
                   <div className="p-6">
                     {order.finishedImage && (
-                      <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group">
+                      <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group cursor-pointer" onClick={() => setEnlargedImage(order.finishedImage)}>
                         <div className="absolute top-0 left-0 bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg z-10">¡Tu Pedido Listo! ✨</div>
                         <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-64 object-cover transition transform group-hover:scale-105"/>
                       </div>
@@ -418,21 +542,12 @@ export default function App() {
                 </div>
              )})}
 
-             {/* SECCION PRODUCTOS DESTACADOS */}
+             {/* SECCION PRODUCTOS DESTACADOS (NUEVO DISEÑO) */}
              <div className="mt-12 mb-12">
                 <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-lg font-bold text-teal-900">Nuestros Productos</h3><div className="h-px bg-slate-200 flex-1"></div></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {products.map(prod => (
-                    <div key={prod.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex gap-4 items-center group hover:border-teal-200 transition">
-                       <img src={prod.imageUrl} className="w-20 h-20 object-cover rounded-lg bg-slate-50" alt={prod.name}/>
-                       <div className="flex-1 min-w-0">
-                         <p className="font-bold text-slate-800 text-sm truncate">{prod.name}</p>
-                         <p className="text-teal-600 font-bold text-lg mb-2">${prod.price.toLocaleString()}</p>
-                         <a href={getWaLink(LINKS.dani, `Hola! 👋 Quisiera consultar por este producto: ${prod.name}`)} target="_blank" className="inline-flex items-center gap-1 bg-green-50 text-green-700 text-xs px-3 py-1.5 rounded-full font-bold hover:bg-green-100 transition">
-                           <MessageCircle size={14}/> Consultar
-                         </a>
-                       </div>
-                    </div>
+                    <ProductCardPublic key={prod.id} prod={prod} />
                   ))}
                 </div>
              </div>
@@ -441,15 +556,15 @@ export default function App() {
              <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-50 text-center">
                  <h3 className="text-sm font-bold text-teal-800 uppercase mb-4">Comunicate y hace tu pedido a INPERU PRODUCCIONES =)</h3>
                  <div className="flex justify-center gap-4 mb-6">
-                    <a href={LINKS.facebook} target="_blank" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={20}/></a>
-                    <a href={LINKS.instagram} target="_blank" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
+                    <a href={LINKS.facebook} target="_blank" rel="noreferrer" className="text-blue-600 bg-blue-50 p-2 rounded-full hover:scale-110 transition"><Facebook size={20}/></a>
+                    <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
-                        <MessageCircle size={20}/> Hablar con CECI
+                        Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
-                        <MessageCircle size={20}/> Hablar con DANI
+                        Hablar con DANI
                     </a>
                  </div>
              </div>
@@ -485,7 +600,12 @@ export default function App() {
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                      <input placeholder="Nombre" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodName} onChange={(e)=>setProdName(e.target.value)}/>
                      <input type="number" placeholder="Precio" className="p-3 bg-white border border-gray-300 rounded-lg w-full text-gray-900 placeholder-gray-400" value={prodPrice} onChange={(e)=>setProdPrice(e.target.value)}/>
-                     <input placeholder="URL Imagen (Opcional)" className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400" value={prodImage} onChange={(e)=>setProdImage(e.target.value)}/>
+                     <textarea 
+                       placeholder="URLs de Imágenes (una por línea). La primera será la principal." 
+                       className="p-3 bg-white border border-gray-300 rounded-lg w-full col-span-2 text-gray-900 placeholder-gray-400 h-24 resize-y" 
+                       value={prodImages} 
+                       onChange={(e)=>setProdImages(e.target.value)}
+                     />
                    </div>
                    <div className="flex gap-2">
                       <button onClick={handleSaveProduct} className="bg-teal-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"><Save size={18}/> {editingProductId ? 'Actualizar' : 'Guardar'}</button>
@@ -495,7 +615,14 @@ export default function App() {
                  <div className="grid grid-cols-2 gap-4">
                    {products.map(p => (
                      <div key={p.id} className="bg-white p-3 rounded-xl border shadow-sm relative group">
-                        <img src={p.imageUrl} className="w-full h-24 object-cover rounded-lg mb-2"/>
+                        <img 
+                          src={p.imageUrl} 
+                          className="w-full aspect-square object-cover rounded-lg mb-2 cursor-pointer hover:opacity-90 transition" 
+                          alt={p.name}
+                          onClick={() => setEnlargedImage(p.imageUrl)}
+                        />
+                        {p.imageUrls && p.imageUrls.length > 1 && <div className="absolute top-4 left-4 bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1"><Images size={12}/> {p.imageUrls.length}</div>}
+                        
                         <p className="font-bold text-gray-900">{p.name}</p>
                         <p className="text-teal-600 font-bold">${p.price.toLocaleString()}</p>
                         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
@@ -516,7 +643,7 @@ export default function App() {
                  </div>
 
                  <div className="bg-white p-6 rounded-xl shadow-lg mb-8 border border-teal-100">
-                    <h3 className="font-bold text-teal-700 mb-4">Nuevo Pedido</h3>
+                    <h3 className="font-bold text-teal-700 mb-4 break-words leading-tight">Nuevo Pedido</h3>
                     {customerHistory.count > 0 && <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm font-bold">¡Cliente Frecuente! {customerHistory.count} compras previas.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                        <input value={newOrderId} readOnly className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-center font-bold text-gray-900"/>
@@ -576,6 +703,17 @@ export default function App() {
            </div>
         )}
       </main>
+      
+      {/* BOTON FLOTANTE DE CARRITO SIEMPRE VISIBLE SI HAY ITEMS */}
+      {cart.length > 0 && !isCartOpen && (
+        <button 
+          onClick={() => setIsCartOpen(true)} 
+          className="fixed bottom-6 right-6 bg-teal-600 text-white p-4 rounded-full shadow-xl shadow-teal-200 animate-in slide-in-from-bottom-10 hover:scale-110 transition z-40 flex items-center gap-2"
+        >
+          <ShoppingCart size={24}/>
+          <span className="font-bold">${cartTotal.toLocaleString()}</span>
+        </button>
+      )}
     </div>
   );
 }
