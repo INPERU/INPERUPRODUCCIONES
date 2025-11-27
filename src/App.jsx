@@ -49,7 +49,8 @@ import {
   Images,
   Minus,
   Settings2,
-  ArrowRight
+  ArrowRight,
+  Eye // Nuevo icono para ver detalles
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -69,34 +70,112 @@ const appId = "inperu-web";
 
 // --- COMPONENTES AUXILIARES ---
 
-const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
+// Modal de Detalle de Producto (Ficha Técnica)
+const ProductDetailModal = ({ prod, onClose, onAddToCart }) => {
   const [currentImg, setCurrentImg] = useState(prod.imageUrl);
   const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row relative animate-in zoom-in-95 duration-200">
+        
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 z-20 bg-white/80 p-2 rounded-full text-slate-600 hover:bg-slate-100 hover:text-red-500 transition shadow-sm"
+        >
+          <X size={24}/>
+        </button>
+
+        {/* Columna Izquierda: Galería */}
+        <div className="w-full md:w-1/2 bg-slate-50 p-4 flex flex-col justify-center relative">
+           <div className="aspect-square w-full rounded-xl overflow-hidden bg-white shadow-sm mb-4 relative group">
+              <img src={currentImg} alt={prod.name} className="w-full h-full object-contain mix-blend-multiply"/>
+           </div>
+           {/* Miniaturas */}
+           {images.length > 1 && (
+             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar justify-center">
+               {images.map((img, idx) => (
+                 <button 
+                   key={idx} 
+                   onClick={() => setCurrentImg(img)} 
+                   className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition flex-shrink-0 ${currentImg === img ? 'border-teal-500 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300'}`}
+                 >
+                   <img src={img} className="w-full h-full object-cover"/>
+                 </button>
+               ))}
+             </div>
+           )}
+        </div>
+
+        {/* Columna Derecha: Info */}
+        <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col overflow-y-auto bg-white">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2 leading-tight">{prod.name}</h2>
+              <p className="text-3xl font-bold text-teal-600 mb-6">${prod.price.toLocaleString()}</p>
+              
+              <div className="prose prose-slate text-slate-600 mb-8 text-sm md:text-base leading-relaxed">
+                <h4 className="font-bold text-slate-800 mb-2 uppercase text-xs tracking-wider">Descripción del producto</h4>
+                <p className="whitespace-pre-line">{prod.description || "Sin descripción detallada disponible para este producto."}</p>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-6 border-t border-slate-100">
+              <button 
+                onClick={() => onAddToCart(prod)}
+                className="w-full py-4 bg-teal-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-teal-200 hover:bg-teal-700 transition flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
+              >
+                <Plus size={24}/> Agregar al Pedido
+              </button>
+              <p className="text-center text-xs text-slate-400 mt-3">
+                Personaliza los detalles en el siguiente paso
+              </p>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Tarjeta de Producto Pública (Catálogo)
+const ProductCardPublic = ({ prod, onAddToCart, onViewDetails }) => {
+  const [currentImg, setCurrentImg] = useState(prod.imageUrl);
 
   useEffect(() => { setCurrentImg(prod.imageUrl); }, [prod]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
-      <div className="p-3 pb-0">
-         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => onEnlarge(currentImg)}>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full relative">
+      
+      {/* Área de Imagen Clickable para ver detalles */}
+      <div className="p-3 pb-0 relative cursor-pointer" onClick={() => onViewDetails(prod)}>
+         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50">
             <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
+            {/* Overlay Ver Detalles */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+               <div className="bg-white/90 text-slate-800 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm">
+                 <Eye size={14}/> Ver Detalle
+               </div>
+            </div>
          </div>
-         {images.length > 1 && (
-           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
-             {images.map((img, idx) => (
-               <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentImg(img); }} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
-                 <img src={img} className="w-full h-full object-cover" alt={`thumb-${idx}`}/>
-               </button>
-             ))}
-           </div>
-         )}
       </div>
+
       <div className="p-4 flex-1 flex flex-col">
-         <h4 className="font-bold text-slate-800 text-sm mb-1">{prod.name}</h4>
-         {prod.description && ( <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> )}
-         <div className="flex items-center justify-between mt-auto">
+         <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 cursor-pointer hover:text-teal-600 transition" onClick={() => onViewDetails(prod)}>
+            {prod.name}
+         </h4>
+         {prod.description && ( 
+           <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> 
+         )}
+         <div className="flex items-center justify-between mt-auto pt-2">
             <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
-            <button onClick={() => onAddToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
+            {/* Botón rápido de agregar (opcional, o puedes hacer que abra el detalle también) */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Para que no abra el detalle si tocan el botón directo
+                onAddToCart(prod);
+              }} 
+              className="bg-teal-50 text-teal-700 p-2 rounded-lg hover:bg-teal-600 hover:text-white transition border border-teal-100"
+              title="Agregar rápido"
+            >
               <Plus size={20}/>
             </button>
          </div>
@@ -134,7 +213,9 @@ export default function App() {
   const [foundOrders, setFoundOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [enlargedImage, setEnlargedImage] = useState(null);
+  
+  // Estado para el producto que se está viendo en detalle
+  const [viewingProduct, setViewingProduct] = useState(null);
 
   // Carrito & Wizard
   const [cart, setCart] = useState([]);
@@ -225,7 +306,6 @@ export default function App() {
   // --- UTILIDADES ---
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
   
-  // 🔥 ESTA ES LA FUNCION QUE FALTABA 🔥
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
 
   const parseWizardSteps = (text) => {
@@ -289,8 +369,11 @@ export default function App() {
           showOptions: false
         }));
       } else {
+        // Cerrar wizard y agregar
         addToCart(wizardState.product, nextExtraCost, nextSelections);
         setWizardState(null);
+        // Si venía de la vista de detalle, cerramos también el detalle
+        setViewingProduct(null);
       }
     }
   };
@@ -330,7 +413,12 @@ export default function App() {
     if (!prodName || !prodPrice) return showNotification("Faltan datos", "error");
     const imageUrls = prodImages.split('\n').map(url => url.trim()).filter(url => url !== '');
     const mainImageUrl = imageUrls.length > 0 ? imageUrls[0] : 'https://via.placeholder.com/150?text=Sin+Foto';
-    const productData = { name: prodName, description: prodDescription, customOptions: prodCustomOptions, price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() };
+    
+    const productData = { 
+      name: prodName, description: prodDescription, customOptions: prodCustomOptions, 
+      price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() 
+    };
+
     try {
       if (editingProductId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), productData); showNotification("Producto actualizado"); } 
       else { productData.createdAt = serverTimestamp(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData); showNotification("Producto agregado"); }
@@ -346,7 +434,6 @@ export default function App() {
   const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setEditingProductId(null); };
   const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
 
-  // --- OTROS HANDLERS ADMIN ---
   const handleAddItem = () => {
     let prodName = 'Personalizado';
     if (selectedProduct !== 'custom') { const p = products.find(x => x.id === selectedProduct); if (p) prodName = p.name; }
@@ -392,16 +479,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> 
       
-      {enlargedImage && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEnlargedImage(null)}>
-          <button className="absolute top-4 right-4 text-white p-2 rounded-full bg-white/10 hover:bg-white/20"><X size={32}/></button>
-          <img src={enlargedImage} alt="Grande" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"/>
-        </div>
+      {/* MODAL DETALLE PRODUCTO */}
+      {viewingProduct && (
+        <ProductDetailModal 
+          prod={viewingProduct} 
+          onClose={() => setViewingProduct(null)} 
+          onAddToCart={(prod) => startWizard(prod)}
+        />
       )}
 
       {/* --- WIZARD MODAL (PASO A PASO) --- */}
       {wizardState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-bold text-xl text-teal-900">{wizardState.product.name}</h3>
@@ -470,7 +559,7 @@ export default function App() {
 
       {/* MODAL CARRITO */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-[80] flex justify-end">
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setIsCartOpen(false)}></div>
           <div className="relative w-full max-w-md bg-white h-full shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col">
             <div className="p-4 border-b flex justify-between items-center bg-teal-700 text-white">
@@ -592,7 +681,7 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {products.map(prod => (
-                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
+                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => setViewingProduct(prod)} onViewDetails={() => setViewingProduct(prod)} />
                     ))}
                   </div>
                 )}
@@ -605,7 +694,7 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
                         Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
@@ -669,7 +758,7 @@ export default function App() {
                 <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-lg font-bold text-teal-900">Nuestros Productos</h3><div className="h-px bg-slate-200 flex-1"></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {products.map(prod => (
-                    <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
+                    <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => setViewingProduct(prod)} onViewDetails={() => setViewingProduct(prod)} />
                   ))}
                 </div>
              </div>
