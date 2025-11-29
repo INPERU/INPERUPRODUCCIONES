@@ -50,7 +50,10 @@ import {
   Minus,
   Settings2,
   ArrowRight,
-  Maximize2 // Icono para indicar que se puede ampliar
+  Maximize2,
+  Eye,
+  ArrowLeft,
+  User
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -77,28 +80,47 @@ const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
   useEffect(() => { setCurrentImg(prod.imageUrl); }, [prod]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
-      <div className="p-3 pb-0">
-         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => onEnlarge(currentImg)}>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full relative">
+      
+      {/* Área de Imagen Clickable para ver detalles */}
+      <div className="p-3 pb-0 relative cursor-pointer" onClick={() => onEnlarge(prod.imageUrl)}>
+         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50">
             <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
+            
+             {images.length > 1 && (
+               <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 pointer-events-none">
+                 <Images size={12}/> {images.length}
+               </div>
+             )}
          </div>
          {images.length > 1 && (
-           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar" onClick={(e) => e.stopPropagation()}>
              {images.map((img, idx) => (
-               <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentImg(img); }} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
+               <button key={idx} onClick={() => setCurrentImg(img)} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
                  <img src={img} className="w-full h-full object-cover" alt={`thumb-${idx}`}/>
                </button>
              ))}
            </div>
          )}
       </div>
+
       <div className="p-4 flex-1 flex flex-col">
-         <h4 className="font-bold text-slate-800 text-sm mb-1">{prod.name}</h4>
-         {prod.description && ( <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> )}
-         <div className="flex items-center justify-between mt-auto">
+         <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 cursor-pointer hover:text-teal-600 transition" onClick={() => onEnlarge(prod.imageUrl)}>
+            {prod.name}
+         </h4>
+         {prod.description && ( 
+           <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> 
+         )}
+         <div className="flex items-center justify-between mt-auto pt-2">
             <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
-            <button onClick={() => onAddToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
-              <Plus size={20}/>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); 
+                onAddToCart(prod);
+              }} 
+              className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100 flex items-center gap-2 text-sm font-bold px-3"
+            >
+              <Plus size={18}/> Lo quiero
             </button>
          </div>
       </div>
@@ -155,6 +177,7 @@ export default function App() {
   const [prodImages, setProdImages] = useState(''); 
   const [prodDescription, setProdDescription] = useState('');
   const [prodCustomOptions, setProdCustomOptions] = useState('');
+  const [prodSeller, setProdSeller] = useState('dani'); 
   const [editingProductId, setEditingProductId] = useState(null); 
 
   // Admin Cotizador
@@ -385,7 +408,6 @@ export default function App() {
   const deleteOrder = async (id) => { if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
   const addFinishedPhoto = async (order) => { const url = prompt("Pega el link de la foto:"); if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); } };
   
-  // --- NUEVA FUNCIÓN BORRAR FOTO TERMINADO ---
   const deleteFinishedPhoto = async (order) => {
     if(window.confirm("¿Borrar la foto del trabajo terminado?")) {
       await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: '' });
@@ -679,7 +701,7 @@ export default function App() {
                     {order.finishedImage && (
                       <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group cursor-pointer" onClick={() => setEnlargedImage(order.finishedImage)}>
                         <div className="absolute top-0 left-0 bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg z-10">¡Tu Pedido Listo! ✨</div>
-                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-auto max-h-96 object-contain bg-slate-50 transition transform group-hover:scale-105"/>
+                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-64 object-cover transition transform group-hover:scale-105"/>
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/10">
                            <div className="bg-white/90 text-slate-800 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm"><Maximize2 size={14}/> Ver Foto</div>
                         </div>
@@ -722,7 +744,7 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
