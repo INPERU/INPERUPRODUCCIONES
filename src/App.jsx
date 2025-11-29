@@ -53,7 +53,8 @@ import {
   Maximize2,
   Eye,
   ArrowLeft,
-  User
+  User,
+  RotateCcw // Icono para cancelar edición
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -171,6 +172,7 @@ export default function App() {
   const [newOrderPhone, setNewOrderPhone] = useState('');
   const [newOrderSocial, setNewOrderSocial] = useState('');
   const [newOrderDeposit, setNewOrderDeposit] = useState(''); 
+  const [editingOrderId, setEditingOrderId] = useState(null); // NUEVO: Estado para saber si estamos editando pedido
   
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
@@ -214,11 +216,11 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (view === 'admin_panel' && !newOrderId) {
+    if (view === 'admin_panel' && !newOrderId && !editingOrderId) { // Solo autogenerar si NO estamos editando
       const maxId = orders.reduce((max, o) => { const num = parseInt(o.orderId); return !isNaN(num) && num > max ? num : max; }, 99); 
       setNewOrderId((maxId + 1).toString());
     }
-  }, [orders, view, newOrderId]);
+  }, [orders, view, newOrderId, editingOrderId]);
 
   useEffect(() => {
     if (newOrderPhone.length > 6) {
@@ -249,6 +251,7 @@ export default function App() {
   // --- UTILIDADES ---
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
   
+  // Función para calcular total en el admin
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
 
   const parseWizardSteps = (text) => {
@@ -393,14 +396,68 @@ export default function App() {
   };
   const handleRemoveItem = (id) => setOrderItems(orderItems.filter(i => i.id !== id));
 
-  const handleCreateOrder = async () => {
+  // --- NUEVO: FUNCION GUARDAR PEDIDO (CREAR O EDITAR) ---
+  const handleSaveOrder = async () => {
     if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos", "error");
     const total = calculateGrandTotal(); 
     const deposit = parseFloat(newOrderDeposit) || 0;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), {
-      clientName: newOrderName, orderId: newOrderId, description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '), items: orderItems, totalPrice: total, deposit: deposit, phone: newOrderPhone, social: newOrderSocial, status: 'received', finishedImage: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-    });
-    setNewOrderId(''); setNewOrderName(''); setNewOrderPhone(''); setNewOrderSocial(''); setNewOrderDeposit(''); setOrderItems([]); setCustomDescription(''); setQuantity(1); showNotification("Pedido creado");
+    
+    const orderData = {
+      clientName: newOrderName, 
+      orderId: newOrderId, 
+      description: orderItems.map(i => `${i.quantity} x ${i.name} ${i.description ? `(${i.description})` : ''}`).join(' + '), 
+      items: orderItems, 
+      totalPrice: total, 
+      deposit: deposit, 
+      phone: newOrderPhone, 
+      social: newOrderSocial, 
+      updatedAt: serverTimestamp()
+    };
+
+    try {
+      if (editingOrderId) {
+        // ACTUALIZAR PEDIDO EXISTENTE
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrderId), orderData);
+        showNotification("Pedido actualizado");
+      } else {
+        // CREAR NUEVO PEDIDO
+        orderData.status = 'received';
+        orderData.finishedImage = '';
+        orderData.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderData);
+        showNotification("Pedido creado");
+      }
+      handleCancelOrderEdit(); // Limpiar formulario
+    } catch (err) {
+      showNotification("Error al guardar", "error");
+    }
+  };
+
+  // --- FUNCION PARA CARGAR DATOS EN EL FORMULARIO (EDITAR) ---
+  const handleEditOrder = (order) => {
+    setEditingOrderId(order.id);
+    setNewOrderId(order.orderId);
+    setNewOrderName(order.clientName);
+    setNewOrderPhone(order.phone || '');
+    setNewOrderSocial(order.social || '');
+    setNewOrderDeposit(order.deposit || '');
+    // Cargamos los items. Si no existe el array 'items' (pedidos viejos), tratamos de parsear la descripción o dejamos vacío
+    setOrderItems(order.items || []); 
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showNotification("Editando pedido #" + order.orderId, "info");
+  };
+
+  const handleCancelOrderEdit = () => {
+    setEditingOrderId(null);
+    setNewOrderId(''); // El useEffect del ID autogenerado lo rellenará
+    setNewOrderName('');
+    setNewOrderPhone('');
+    setNewOrderSocial('');
+    setNewOrderDeposit('');
+    setOrderItems([]);
+    setCustomDescription('');
+    setQuantity(1);
   };
   
   const updateStatus = async (id, status) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id), { status, updatedAt: serverTimestamp() }); };
@@ -497,7 +554,7 @@ export default function App() {
                           NO, prefiero la opción estándar
                         </button>
                      </div>
-                     <p className="text-xs text-slate-300 mt-4 italic">*Si eliges NO, avanzaremos al siguiente paso sin costo.</p>
+                     <p className="text-xs text-slate-300 mt-4 italic">*Si eliges NO, avanzaremos al siguiente paso sin costo extra.</p>
                   </div>
                )}
 
@@ -864,8 +921,12 @@ export default function App() {
                  </div>
 
                  <div className="bg-white p-6 rounded-xl shadow-lg mb-8 border border-teal-100">
-                    <h3 className="font-bold text-teal-700 mb-4 break-words leading-tight">Nuevo Pedido</h3>
-                    {customerHistory.count > 0 && <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm font-bold">¡Cliente Frecuente! {customerHistory.count} compras previas.</div>}
+                    {/* TITULO CAMBIABLE SEGUN ESTADO */}
+                    <h3 className="font-bold text-teal-700 mb-4 flex items-center gap-2">
+                       {editingOrderId ? <><Pencil size={20}/> Editando Pedido #{newOrderId}</> : "Nuevo Pedido"}
+                    </h3>
+                    
+                    {customerHistory.count > 0 && !editingOrderId && <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-sm font-bold">¡Cliente Frecuente! {customerHistory.count} compras previas.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                        <input value={newOrderId} readOnly className="p-3 bg-gray-100 border border-gray-300 rounded-lg text-center font-bold text-gray-900"/>
                        <input placeholder="Teléfono" value={newOrderPhone} onChange={(e)=>setNewOrderPhone(e.target.value)} className="p-3 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400"/>
@@ -895,7 +956,16 @@ export default function App() {
 
                     <div className="flex justify-end items-center gap-4">
                        <div className="text-right"><span className="text-xs text-slate-400">Seña:</span><input type="number" className="ml-2 p-2 border bg-white border-gray-300 rounded w-24 font-bold text-green-600" value={newOrderDeposit} onChange={(e)=>setNewOrderDeposit(e.target.value)}/></div>
-                       <button onClick={handleCreateOrder} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold">Crear Pedido</button>
+                       
+                       {/* BOTONES ACCION PEDIDO */}
+                       {editingOrderId ? (
+                          <>
+                             <button onClick={handleCancelOrderEdit} className="bg-slate-200 text-slate-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2"><RotateCcw size={18}/> Cancelar</button>
+                             <button onClick={handleSaveOrder} className="bg-teal-600 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2"><Save size={18}/> Guardar Cambios</button>
+                          </>
+                       ) : (
+                          <button onClick={handleSaveOrder} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-bold">Crear Pedido</button>
+                       )}
                     </div>
                  </div>
 
@@ -906,6 +976,13 @@ export default function App() {
                           <h4 className="font-bold text-lg text-gray-900">{o.clientName}</h4>
                           <p className="text-sm text-slate-500 mb-2">{o.description}</p>
                           <div className="flex flex-wrap gap-2 items-center">
+                             {/* BOTON EDITAR PEDIDO */}
+                             <button onClick={()=>handleEditOrder(o)} className="p-2 rounded-lg bg-slate-100 text-slate-500 hover:bg-teal-50 hover:text-teal-600" title="Editar Pedido">
+                                <Pencil size={18}/>
+                             </button>
+
+                             <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
                              {Object.keys(statusConfig).map(k => k !== 'delivered' && (
                                 <button key={k} onClick={()=>updateStatus(o.id, k)} className={`p-2 rounded-lg ${o.status===k ? 'bg-teal-600 text-white':'bg-slate-100 text-slate-400'}`}>{statusConfig[k].label}</button>
                              ))}
