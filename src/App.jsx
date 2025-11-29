@@ -50,11 +50,11 @@ import {
   Minus,
   Settings2,
   ArrowRight,
-  Maximize2,
   Eye,
   ArrowLeft,
   User,
-  RotateCcw // Icono para cancelar edición
+  RotateCcw,
+  FileText // <--- ¡AQUÍ FALTABA ESTE IMPORT!
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -74,7 +74,71 @@ const appId = "inperu-web";
 
 // --- COMPONENTES AUXILIARES ---
 
-const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
+// 1. MODAL DE DETALLE (FICHA TÉCNICA)
+const ProductDetailModal = ({ prod, onClose, onAddToCart }) => {
+  const [currentImg, setCurrentImg] = useState(prod.imageUrl);
+  const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row relative animate-in zoom-in-95 duration-200">
+        
+        <button 
+          onClick={onClose} 
+          className="absolute top-4 right-4 z-20 bg-white/80 p-2 rounded-full text-slate-600 hover:bg-slate-100 hover:text-red-500 transition shadow-sm"
+        >
+          <X size={24}/>
+        </button>
+
+        {/* Columna Izquierda: Galería */}
+        <div className="w-full md:w-1/2 bg-slate-50 p-4 flex flex-col justify-center relative border-b md:border-b-0 md:border-r border-slate-100">
+           <div className="aspect-square w-full rounded-xl overflow-hidden bg-white shadow-sm mb-4 relative group">
+              <img src={currentImg} alt={prod.name} className="w-full h-full object-contain"/>
+           </div>
+           {/* Miniaturas */}
+           {images.length > 1 && (
+             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar justify-center">
+               {images.map((img, idx) => (
+                 <button 
+                   key={idx} 
+                   onClick={() => setCurrentImg(img)} 
+                   className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition flex-shrink-0 ${currentImg === img ? 'border-teal-500 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300'}`}
+                 >
+                   <img src={img} className="w-full h-full object-cover"/>
+                 </button>
+               ))}
+             </div>
+           )}
+        </div>
+
+        {/* Columna Derecha: Info */}
+        <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col overflow-y-auto bg-white">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2 leading-tight">{prod.name}</h2>
+              <p className="text-3xl font-bold text-teal-600 mb-6">${prod.price.toLocaleString()}</p>
+              
+              <div className="prose prose-slate text-slate-600 mb-8 text-sm md:text-base leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <h4 className="font-bold text-slate-800 mb-2 uppercase text-xs tracking-wider flex items-center gap-2"><FileText size={14}/> Descripción</h4>
+                <p className="whitespace-pre-line">{prod.description || "Sin descripción detallada."}</p>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-6 border-t border-slate-100">
+              <button 
+                onClick={() => onAddToCart(prod)}
+                className="w-full py-4 bg-teal-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-teal-200 hover:bg-teal-700 transition flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
+              >
+                <Plus size={24}/> Agregar al Pedido
+              </button>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 2. TARJETA PÚBLICA (CATÁLOGO)
+const ProductCardPublic = ({ prod, onAddToCart, onViewDetails }) => {
   const [currentImg, setCurrentImg] = useState(prod.imageUrl);
   const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
 
@@ -84,7 +148,7 @@ const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full relative">
       
       {/* Área de Imagen Clickable para ver detalles */}
-      <div className="p-3 pb-0 relative cursor-pointer" onClick={() => onEnlarge(prod.imageUrl)}>
+      <div className="p-3 pb-0 relative cursor-pointer" onClick={() => onViewDetails(prod)}>
          <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50">
             <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
             
@@ -93,20 +157,18 @@ const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
                  <Images size={12}/> {images.length}
                </div>
              )}
+
+            {/* Overlay "Ver Detalle" al pasar mouse */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+               <div className="bg-white/90 text-slate-800 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm">
+                 <Eye size={14}/> Ver Detalle
+               </div>
+            </div>
          </div>
-         {images.length > 1 && (
-           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar" onClick={(e) => e.stopPropagation()}>
-             {images.map((img, idx) => (
-               <button key={idx} onClick={() => setCurrentImg(img)} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
-                 <img src={img} className="w-full h-full object-cover" alt={`thumb-${idx}`}/>
-               </button>
-             ))}
-           </div>
-         )}
       </div>
 
       <div className="p-4 flex-1 flex flex-col">
-         <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 cursor-pointer hover:text-teal-600 transition" onClick={() => onEnlarge(prod.imageUrl)}>
+         <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 cursor-pointer hover:text-teal-600 transition" onClick={() => onViewDetails(prod)}>
             {prod.name}
          </h4>
          {prod.description && ( 
@@ -159,6 +221,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [viewingProduct, setViewingProduct] = useState(null);
 
   // Carrito & Wizard
   const [cart, setCart] = useState([]);
@@ -250,7 +313,6 @@ export default function App() {
 
   // --- UTILIDADES ---
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
-  
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
 
   const parseWizardSteps = (text) => {
@@ -316,6 +378,7 @@ export default function App() {
       } else {
         addToCart(wizardState.product, nextExtraCost, nextSelections);
         setWizardState(null);
+        setViewingProduct(null); 
       }
     }
   };
@@ -324,7 +387,7 @@ export default function App() {
     const finalPrice = prod.price + extraCost;
     const optionsString = Object.entries(selectedOpts).map(([k, v]) => `${k}: ${v}`).join(' | ');
     const cartItemId = `${prod.id}-${optionsString}-${finalPrice}-${Date.now()}`; 
-    setCart(prev => [...prev, { ...prod, price: finalPrice, qty: 1, selectedOptions: optionsString, cartItemId }]);
+    setCart(prev => [...prev, { ...prod, price: finalPrice, qty: 1, selectedOptions: optionsString, cartItemId, seller: prod.seller }]);
     showNotification("Agregado al carrito");
     setIsCartOpen(true);
   };
@@ -468,7 +531,7 @@ export default function App() {
   const sendWhatsAppMessage = (order) => {
     if (!order.phone) return showNotification("Sin teléfono", "error");
     const statusText = statusConfig[order.status]?.label || "Actualizado";
-    const message = `Hola ${order.clientName}! \n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle aquí: ${APP_URL}\n\n¡Muchas gracias!`;
+    const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle aquí: ${APP_URL}\n\n¡Muchas gracias!`;
     window.open(`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
   };
   const handleAdminLogin = (e) => { e.preventDefault(); if (adminPass === 'Luisana1510++') { setIsAdmin(true); setView('admin_panel'); setAdminPass(''); showNotification("¡Bienvenida!"); } else { showNotification("Clave incorrecta", "error"); } };
@@ -488,6 +551,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> 
       
+      {/* MODAL DETALLE PRODUCTO */}
+      {viewingProduct && (
+        <ProductDetailModal 
+          prod={viewingProduct} 
+          onClose={() => setViewingProduct(null)} 
+          onAddToCart={(prod) => startWizard(prod)}
+        />
+      )}
+
       {enlargedImage && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEnlargedImage(null)}>
           <button className="absolute top-4 right-4 text-white p-2 rounded-full bg-white/10 hover:bg-white/20"><X size={32}/></button>
@@ -649,6 +721,7 @@ export default function App() {
               {cart.length > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{cart.length}</span>}
             </button>
             
+            {/* EL CANDADO AHORA SIEMPRE ES VISIBLE Y FUNCIONAL */}
             <button 
                onClick={() => isAdmin ? setView('home') : setView('admin_login')} 
                className={`transition p-2 rounded-full ${isAdmin ? 'text-red-400 hover:bg-red-50' : 'text-slate-400 hover:text-teal-600 hover:bg-slate-50'}`}
@@ -702,7 +775,7 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {products.map(prod => (
-                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
+                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} onViewDetails={() => setViewingProduct(prod)} />
                     ))}
                   </div>
                 )}
@@ -715,10 +788,10 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci!  Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con CECI
                     </a>
-                    <a href={getWaLink(LINKS.dani, "Hola Dani!  Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con DANI
                     </a>
                  </div>
@@ -794,10 +867,10 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci!  Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con CECI
                     </a>
-                    <a href={getWaLink(LINKS.dani, "Hola Dani!  Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con DANI
                     </a>
                  </div>
