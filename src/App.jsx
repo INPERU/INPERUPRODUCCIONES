@@ -172,7 +172,7 @@ export default function App() {
   const [newOrderPhone, setNewOrderPhone] = useState('');
   const [newOrderSocial, setNewOrderSocial] = useState('');
   const [newOrderDeposit, setNewOrderDeposit] = useState(''); 
-  const [editingOrderId, setEditingOrderId] = useState(null); // NUEVO: Estado para saber si estamos editando pedido
+  const [editingOrderId, setEditingOrderId] = useState(null); 
   
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
@@ -216,7 +216,7 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (view === 'admin_panel' && !newOrderId && !editingOrderId) { // Solo autogenerar si NO estamos editando
+    if (view === 'admin_panel' && !newOrderId && !editingOrderId) { 
       const maxId = orders.reduce((max, o) => { const num = parseInt(o.orderId); return !isNaN(num) && num > max ? num : max; }, 99); 
       setNewOrderId((maxId + 1).toString());
     }
@@ -251,7 +251,6 @@ export default function App() {
   // --- UTILIDADES ---
   const showNotification = (msg, type = 'success') => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
   
-  // Función para calcular total en el admin
   const calculateGrandTotal = () => orderItems.reduce((acc, i) => acc + i.subtotal, 0);
 
   const parseWizardSteps = (text) => {
@@ -396,7 +395,6 @@ export default function App() {
   };
   const handleRemoveItem = (id) => setOrderItems(orderItems.filter(i => i.id !== id));
 
-  // --- NUEVO: FUNCION GUARDAR PEDIDO (CREAR O EDITAR) ---
   const handleSaveOrder = async () => {
     if (!newOrderName || !newOrderId || orderItems.length === 0) return showNotification("Faltan datos", "error");
     const total = calculateGrandTotal(); 
@@ -416,24 +414,21 @@ export default function App() {
 
     try {
       if (editingOrderId) {
-        // ACTUALIZAR PEDIDO EXISTENTE
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', editingOrderId), orderData);
         showNotification("Pedido actualizado");
       } else {
-        // CREAR NUEVO PEDIDO
         orderData.status = 'received';
         orderData.finishedImage = '';
         orderData.createdAt = serverTimestamp();
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderData);
         showNotification("Pedido creado");
       }
-      handleCancelOrderEdit(); // Limpiar formulario
+      handleCancelOrderEdit();
     } catch (err) {
       showNotification("Error al guardar", "error");
     }
   };
 
-  // --- FUNCION PARA CARGAR DATOS EN EL FORMULARIO (EDITAR) ---
   const handleEditOrder = (order) => {
     setEditingOrderId(order.id);
     setNewOrderId(order.orderId);
@@ -441,16 +436,14 @@ export default function App() {
     setNewOrderPhone(order.phone || '');
     setNewOrderSocial(order.social || '');
     setNewOrderDeposit(order.deposit || '');
-    // Cargamos los items. Si no existe el array 'items' (pedidos viejos), tratamos de parsear la descripción o dejamos vacío
     setOrderItems(order.items || []); 
-    
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showNotification("Editando pedido #" + order.orderId, "info");
   };
 
   const handleCancelOrderEdit = () => {
     setEditingOrderId(null);
-    setNewOrderId(''); // El useEffect del ID autogenerado lo rellenará
+    setNewOrderId(''); 
     setNewOrderName('');
     setNewOrderPhone('');
     setNewOrderSocial('');
@@ -722,7 +715,7 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
                         Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
@@ -943,7 +936,7 @@ export default function App() {
                           <input type="number" className="p-2 bg-white border border-gray-300 rounded-lg w-24 text-gray-900" value={unitPrice} onChange={(e)=>setUnitPrice(parseInt(e.target.value)||0)}/>
                           <button onClick={handleAddItem} className="bg-teal-600 text-white p-2 rounded-lg"><Plus size={20}/></button>
                        </div>
-                       <input placeholder="Detalle..." className="w-full p-2 bg-white border border-gray-300 rounded-lg mb-2 text-gray-900 placeholder-gray-400" value={customDescription} onChange={(e)=>setCustomDescription(e.target.value)}/>
+                       <textarea placeholder="Detalle..." className="w-full p-2 bg-white border border-gray-300 rounded-lg mb-2 text-gray-900 placeholder-gray-400 resize-y h-24" value={customDescription} onChange={(e)=>setCustomDescription(e.target.value)}/>
                        
                        {orderItems.map(i => (
                           <div key={i.id} className="flex justify-between text-sm border-b py-1 text-gray-800">
