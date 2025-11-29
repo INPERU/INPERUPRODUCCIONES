@@ -50,7 +50,7 @@ import {
   Minus,
   Settings2,
   ArrowRight,
-  Eye // Nuevo icono para ver detalles
+  Maximize2 // Icono para indicar que se puede ampliar
 } from 'lucide-react';
 
 // --- 1. CONFIGURACIÓN DE FIREBASE ---
@@ -70,112 +70,34 @@ const appId = "inperu-web";
 
 // --- COMPONENTES AUXILIARES ---
 
-// Modal de Detalle de Producto (Ficha Técnica)
-const ProductDetailModal = ({ prod, onClose, onAddToCart }) => {
+const ProductCardPublic = ({ prod, onAddToCart, onEnlarge }) => {
   const [currentImg, setCurrentImg] = useState(prod.imageUrl);
   const images = prod.imageUrls && prod.imageUrls.length > 0 ? prod.imageUrls : [prod.imageUrl];
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row relative animate-in zoom-in-95 duration-200">
-        
-        <button 
-          onClick={onClose} 
-          className="absolute top-4 right-4 z-20 bg-white/80 p-2 rounded-full text-slate-600 hover:bg-slate-100 hover:text-red-500 transition shadow-sm"
-        >
-          <X size={24}/>
-        </button>
-
-        {/* Columna Izquierda: Galería */}
-        <div className="w-full md:w-1/2 bg-slate-50 p-4 flex flex-col justify-center relative">
-           <div className="aspect-square w-full rounded-xl overflow-hidden bg-white shadow-sm mb-4 relative group">
-              <img src={currentImg} alt={prod.name} className="w-full h-full object-contain mix-blend-multiply"/>
-           </div>
-           {/* Miniaturas */}
-           {images.length > 1 && (
-             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar justify-center">
-               {images.map((img, idx) => (
-                 <button 
-                   key={idx} 
-                   onClick={() => setCurrentImg(img)} 
-                   className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition flex-shrink-0 ${currentImg === img ? 'border-teal-500 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300'}`}
-                 >
-                   <img src={img} className="w-full h-full object-cover"/>
-                 </button>
-               ))}
-             </div>
-           )}
-        </div>
-
-        {/* Columna Derecha: Info */}
-        <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col overflow-y-auto bg-white">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-2 leading-tight">{prod.name}</h2>
-              <p className="text-3xl font-bold text-teal-600 mb-6">${prod.price.toLocaleString()}</p>
-              
-              <div className="prose prose-slate text-slate-600 mb-8 text-sm md:text-base leading-relaxed">
-                <h4 className="font-bold text-slate-800 mb-2 uppercase text-xs tracking-wider">Descripción del producto</h4>
-                <p className="whitespace-pre-line">{prod.description || "Sin descripción detallada disponible para este producto."}</p>
-              </div>
-            </div>
-
-            <div className="mt-auto pt-6 border-t border-slate-100">
-              <button 
-                onClick={() => onAddToCart(prod)}
-                className="w-full py-4 bg-teal-600 text-white rounded-xl font-bold text-lg shadow-lg shadow-teal-200 hover:bg-teal-700 transition flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95"
-              >
-                <Plus size={24}/> Agregar al Pedido
-              </button>
-              <p className="text-center text-xs text-slate-400 mt-3">
-                Personaliza los detalles en el siguiente paso
-              </p>
-            </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Tarjeta de Producto Pública (Catálogo)
-const ProductCardPublic = ({ prod, onAddToCart, onViewDetails }) => {
-  const [currentImg, setCurrentImg] = useState(prod.imageUrl);
 
   useEffect(() => { setCurrentImg(prod.imageUrl); }, [prod]);
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full relative">
-      
-      {/* Área de Imagen Clickable para ver detalles */}
-      <div className="p-3 pb-0 relative cursor-pointer" onClick={() => onViewDetails(prod)}>
-         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group hover:shadow-md transition flex flex-col h-full">
+      <div className="p-3 pb-0">
+         <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-50 cursor-pointer" onClick={() => onEnlarge(currentImg)}>
             <img src={currentImg} alt={prod.name} className="w-full h-full object-cover transition duration-500 group-hover:scale-105"/>
-            {/* Overlay Ver Detalles */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
-               <div className="bg-white/90 text-slate-800 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm">
-                 <Eye size={14}/> Ver Detalle
-               </div>
-            </div>
          </div>
-      </div>
-
-      <div className="p-4 flex-1 flex flex-col">
-         <h4 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 cursor-pointer hover:text-teal-600 transition" onClick={() => onViewDetails(prod)}>
-            {prod.name}
-         </h4>
-         {prod.description && ( 
-           <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> 
+         {images.length > 1 && (
+           <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
+             {images.map((img, idx) => (
+               <button key={idx} onClick={(e) => { e.stopPropagation(); setCurrentImg(img); }} className={`w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 border-2 ${currentImg === img ? 'border-teal-500' : 'border-transparent'}`}>
+                 <img src={img} className="w-full h-full object-cover" alt={`thumb-${idx}`}/>
+               </button>
+             ))}
+           </div>
          )}
-         <div className="flex items-center justify-between mt-auto pt-2">
+      </div>
+      <div className="p-4 flex-1 flex flex-col">
+         <h4 className="font-bold text-slate-800 text-sm mb-1">{prod.name}</h4>
+         {prod.description && ( <p className="text-xs text-slate-500 mb-3 line-clamp-2 flex-1">{prod.description}</p> )}
+         <div className="flex items-center justify-between mt-auto">
             <span className="text-lg font-bold text-teal-600">${prod.price.toLocaleString()}</span>
-            {/* Botón rápido de agregar (opcional, o puedes hacer que abra el detalle también) */}
-            <button 
-              onClick={(e) => {
-                e.stopPropagation(); // Para que no abra el detalle si tocan el botón directo
-                onAddToCart(prod);
-              }} 
-              className="bg-teal-50 text-teal-700 p-2 rounded-lg hover:bg-teal-600 hover:text-white transition border border-teal-100"
-              title="Agregar rápido"
-            >
+            <button onClick={() => onAddToCart(prod)} className="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition shadow-md shadow-teal-100">
               <Plus size={20}/>
             </button>
          </div>
@@ -213,9 +135,7 @@ export default function App() {
   const [foundOrders, setFoundOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  
-  // Estado para el producto que se está viendo en detalle
-  const [viewingProduct, setViewingProduct] = useState(null);
+  const [enlargedImage, setEnlargedImage] = useState(null);
 
   // Carrito & Wizard
   const [cart, setCart] = useState([]);
@@ -369,11 +289,8 @@ export default function App() {
           showOptions: false
         }));
       } else {
-        // Cerrar wizard y agregar
         addToCart(wizardState.product, nextExtraCost, nextSelections);
         setWizardState(null);
-        // Si venía de la vista de detalle, cerramos también el detalle
-        setViewingProduct(null);
       }
     }
   };
@@ -397,6 +314,13 @@ export default function App() {
   const sendCartToWhatsapp = () => {
     if (cart.length === 0) return;
     if (!clientNameForCart.trim()) { showNotification("Por favor, ingresa tu nombre", "error"); return; }
+    
+    const sellers = new Set(cart.map(item => item.seller || 'dani'));
+    let targetPhone = LINKS.dani; 
+    if (sellers.size === 1 && sellers.has('ceci')) {
+        targetPhone = LINKS.ceci;
+    }
+
     let message = `Hola INPERU PRODUCCIONES! Soy *${clientNameForCart}*.\nQuiero hacer el siguiente pedido:\n\n`;
     cart.forEach(item => {
       message += `▪️ ${item.qty} x ${item.name}`;
@@ -404,7 +328,8 @@ export default function App() {
       message += `\n   L $${(item.price * item.qty).toLocaleString()}\n`;
     });
     message += `\n*Total Estimado: $${cartTotal.toLocaleString()}*\n\nQuedo a la espera asi avanzamos con el pedido. Gracias!`;
-    window.open(`https://wa.me/${LINKS.dani}?text=${encodeURIComponent(message)}`, '_blank');
+    
+    window.open(`https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`, '_blank');
     setCart([]); setIsCartOpen(false); setClientNameForCart('');
   };
 
@@ -416,22 +341,25 @@ export default function App() {
     
     const productData = { 
       name: prodName, description: prodDescription, customOptions: prodCustomOptions, 
-      price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, category: 'Papelería', updatedAt: serverTimestamp() 
+      price: parseFloat(prodPrice), imageUrl: mainImageUrl, imageUrls: imageUrls, 
+      seller: prodSeller, 
+      category: 'Papelería', updatedAt: serverTimestamp() 
     };
 
     try {
       if (editingProductId) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), productData); showNotification("Producto actualizado"); } 
       else { productData.createdAt = serverTimestamp(); await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), productData); showNotification("Producto agregado"); }
-      setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setEditingProductId(null);
+      setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setProdSeller('dani'); setEditingProductId(null);
     } catch (err) { showNotification("Error al guardar", "error"); }
   };
 
   const handleEditProduct = (prod) => { 
     setProdName(prod.name); setProdPrice(prod.price); setProdImages(prod.imageUrls ? prod.imageUrls.join('\n') : prod.imageUrl); 
     setProdDescription(prod.description || ''); setProdCustomOptions(prod.customOptions || ''); 
+    setProdSeller(prod.seller || 'dani');
     setEditingProductId(prod.id); window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
-  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setEditingProductId(null); };
+  const handleCancelEdit = () => { setProdName(''); setProdPrice(''); setProdImages(''); setProdDescription(''); setProdCustomOptions(''); setProdSeller('dani'); setEditingProductId(null); };
   const handleDeleteProduct = async (id) => { if(window.confirm("¿Borrar producto?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id)); };
 
   const handleAddItem = () => {
@@ -456,6 +384,15 @@ export default function App() {
   const markAsPaid = async (order) => { if(window.confirm("¿Marcar como pagado?")) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { deposit: order.totalPrice, updatedAt: serverTimestamp() }); };
   const deleteOrder = async (id) => { if(window.confirm("¿Seguro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', id)); };
   const addFinishedPhoto = async (order) => { const url = prompt("Pega el link de la foto:"); if (url) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: url }); showNotification("¡Foto agregada!"); } };
+  
+  // --- NUEVA FUNCIÓN BORRAR FOTO TERMINADO ---
+  const deleteFinishedPhoto = async (order) => {
+    if(window.confirm("¿Borrar la foto del trabajo terminado?")) {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: '' });
+      showNotification("Foto eliminada");
+    }
+  };
+
   const sendWhatsAppMessage = (order) => {
     if (!order.phone) return showNotification("Sin teléfono", "error");
     const statusText = statusConfig[order.status]?.label || "Actualizado";
@@ -479,13 +416,11 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-24"> 
       
-      {/* MODAL DETALLE PRODUCTO */}
-      {viewingProduct && (
-        <ProductDetailModal 
-          prod={viewingProduct} 
-          onClose={() => setViewingProduct(null)} 
-          onAddToCart={(prod) => startWizard(prod)}
-        />
+      {enlargedImage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEnlargedImage(null)}>
+          <button className="absolute top-4 right-4 text-white p-2 rounded-full bg-white/10 hover:bg-white/20"><X size={32}/></button>
+          <img src={enlargedImage} alt="Grande" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"/>
+        </div>
       )}
 
       {/* --- WIZARD MODAL (PASO A PASO) --- */}
@@ -512,7 +447,7 @@ export default function App() {
                           <button 
                             key={idx}
                             onClick={() => handleWizardAction('SELECT_OPTION', opt)}
-                            className="p-3 rounded-xl border-2 border-teal-100 bg-teal-50 text-teal-800 font-bold hover:bg-teal-100 hover:border-teal-300 transition text-center shadow-sm"
+                            className="p-3 rounded-xl border-2 border-teal-100 bg-teal-50 text-teal-800 font-bold hover:bg-teal-100 hover:border-teal-300 transition text-center shadow-sm break-words"
                           >
                             {opt}
                           </button>
@@ -540,7 +475,7 @@ export default function App() {
                           NO, prefiero la opción estándar
                         </button>
                      </div>
-                     <p className="text-xs text-slate-300 mt-4 italic">*Si eliges NO, avanzaremos al siguiente paso sin costo extra.</p>
+                     <p className="text-xs text-slate-300 mt-4 italic">*Si eliges NO, avanzaremos al siguiente paso sin costo.</p>
                   </div>
                )}
 
@@ -613,7 +548,7 @@ export default function App() {
                   onChange={(e) => setClientNameForCart(e.target.value)}
                 />
                 <button onClick={sendCartToWhatsapp} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 shadow-lg shadow-green-200 transition">
-                  <MessageCircle/> Pedir por WhatsApp
+                  <MessageCircle/> Realizar Pedido por WhatsApp
                 </button>
               </div>
             )}
@@ -622,17 +557,31 @@ export default function App() {
       )}
 
       <header className="bg-white shadow-sm sticky top-0 z-50 border-b border-teal-50">
-        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => {setView('home'); setFoundOrders([]); setSearchQuery('');}}>
+        <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between relative">
+          
+          {/* LOGO / BOTON VOLVER */}
+          <div className="flex items-center gap-2 cursor-pointer z-20" onClick={() => {setView('home'); setFoundOrders([]); setSearchQuery('');}}>
+            {view === 'search_result' && (
+                <button onClick={(e) => {e.stopPropagation(); setView('home'); setFoundOrders([]); setSearchQuery('');}} className="mr-1 text-slate-400 hover:text-teal-600 p-1 rounded-full hover:bg-slate-100">
+                   <ArrowLeft size={20}/>
+                </button>
+            )}
             <img src={LOGO_URL} alt="Logo" className="w-8 h-8 object-contain" />
             <h1 className="font-bold text-xl text-teal-800 tracking-tight">INPERU <span className="text-teal-600 font-normal">PRODUCCIONES</span></h1>
           </div>
-          <div className="flex items-center gap-2">
+          
+          {/* BOTONES DERECHA (CARRITO + ADMIN) */}
+          <div className="flex items-center gap-2 z-20">
             <button onClick={() => setIsCartOpen(true)} className="relative p-2 text-teal-700 hover:bg-teal-50 rounded-full transition">
               <ShoppingCart size={20}/>
               {cart.length > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{cart.length}</span>}
             </button>
-            <button onClick={() => isAdmin ? setView('home') : setView('admin_login')} className="text-slate-400 hover:text-teal-600 transition p-2">
+            
+            <button 
+               onClick={() => isAdmin ? setView('home') : setView('admin_login')} 
+               className={`transition p-2 rounded-full ${isAdmin ? 'text-red-400 hover:bg-red-50' : 'text-slate-400 hover:text-teal-600 hover:bg-slate-50'}`}
+               title={isAdmin ? "Salir Admin" : "Ingreso Admin"}
+            >
               {isAdmin ? <LogOut size={16}/> : <Lock size={16}/>}
             </button>
           </div>
@@ -681,7 +630,7 @@ export default function App() {
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {products.map(prod => (
-                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => setViewingProduct(prod)} onViewDetails={() => setViewingProduct(prod)} />
+                      <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
                     ))}
                   </div>
                 )}
@@ -694,7 +643,7 @@ export default function App() {
                     <a href={LINKS.instagram} target="_blank" rel="noreferrer" className="text-pink-600 bg-pink-50 p-2 rounded-full hover:scale-110 transition"><Instagram size={20}/></a>
                  </div>
                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition shadow-lg shadow-green-200">
+                    <a href={getWaLink(LINKS.ceci, "Hola Ceci! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
                         Hablar con CECI
                     </a>
                     <a href={getWaLink(LINKS.dani, "Hola Dani! 👋 Quiero hacer un pedido.")} target="_blank" className="bg-green-600 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-green-100 transition">
@@ -707,7 +656,6 @@ export default function App() {
 
         {view === 'search_result' && foundOrders.length > 0 && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 pb-12">
-            <button onClick={() => setView('home')} className="mb-6 text-slate-500 hover:text-teal-700 flex items-center gap-2 text-sm font-medium transition">← Volver</button>
             
             <h2 className="text-lg font-bold text-slate-800 mb-4 px-2 flex items-center gap-2">
                <span className="w-2 h-6 bg-teal-600 rounded-full"></span> Hola, {foundOrders[0].clientName} 👋
@@ -731,9 +679,13 @@ export default function App() {
                     {order.finishedImage && (
                       <div className="mb-6 rounded-xl overflow-hidden border-2 border-teal-500 shadow-lg relative group cursor-pointer" onClick={() => setEnlargedImage(order.finishedImage)}>
                         <div className="absolute top-0 left-0 bg-teal-500 text-white text-xs font-bold px-3 py-1 rounded-br-lg z-10">¡Tu Pedido Listo! ✨</div>
-                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-64 object-cover transition transform group-hover:scale-105"/>
+                        <img src={order.finishedImage} alt="Producto Terminado" className="w-full h-auto max-h-96 object-contain bg-slate-50 transition transform group-hover:scale-105"/>
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/10">
+                           <div className="bg-white/90 text-slate-800 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm backdrop-blur-sm"><Maximize2 size={14}/> Ver Foto</div>
+                        </div>
                       </div>
                     )}
+                    
                     <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
                       <div className="bg-teal-50 p-3 rounded-lg"><ShoppingBag className="text-teal-600 w-6 h-6"/></div>
                       <div className="flex-1"><p className="text-sm text-slate-500 mb-1">Detalle</p><p className="text-slate-800 font-medium text-sm">{order.description || "Sin detalle"}</p></div>
@@ -758,7 +710,7 @@ export default function App() {
                 <div className="flex items-center gap-4 mb-6"><div className="h-px bg-slate-200 flex-1"></div><h3 className="text-lg font-bold text-teal-900">Nuestros Productos</h3><div className="h-px bg-slate-200 flex-1"></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {products.map(prod => (
-                    <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => setViewingProduct(prod)} onViewDetails={() => setViewingProduct(prod)} />
+                    <ProductCardPublic key={prod.id} prod={prod} onAddToCart={() => startWizard(prod)} onEnlarge={setEnlargedImage} />
                   ))}
                 </div>
              </div>
@@ -820,6 +772,19 @@ export default function App() {
                          value={prodCustomOptions} 
                          onChange={(e)=>setProdCustomOptions(e.target.value)}
                        />
+                       
+                       {/* SELECTOR DE VENDEDOR */}
+                       <div className="mt-4 flex items-center gap-2">
+                         <label className="text-xs text-slate-500 font-bold flex items-center gap-1"><User size={12}/> ¿Quién vende?</label>
+                         <select 
+                           className="p-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 outline-none"
+                           value={prodSeller}
+                           onChange={(e) => setProdSeller(e.target.value)}
+                         >
+                           <option value="dani">Dani</option>
+                           <option value="ceci">Ceci</option>
+                         </select>
+                       </div>
                      </div>
 
                      <textarea 
@@ -853,6 +818,12 @@ export default function App() {
                         
                         <p className="font-bold text-gray-900">{p.name}</p>
                         <p className="text-teal-600 font-bold">${p.price.toLocaleString()}</p>
+                        
+                        {/* Etiqueta de Vendedor */}
+                        <div className="absolute bottom-2 left-2 bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded-full border border-slate-200 uppercase font-bold">
+                           {p.seller || 'dani'}
+                        </div>
+
                         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                            <button onClick={() => handleEditProduct(p)} className="bg-white p-1 rounded-full shadow text-teal-600 hover:bg-teal-50"><Pencil size={14}/></button>
                            <button onClick={() => handleDeleteProduct(p.id)} className="bg-white p-1 rounded-full shadow text-red-500 hover:bg-red-50"><Trash2 size={14}/></button>
@@ -917,10 +888,27 @@ export default function App() {
                                 <button key={k} onClick={()=>updateStatus(o.id, k)} className={`p-2 rounded-lg ${o.status===k ? 'bg-teal-600 text-white':'bg-slate-100 text-slate-400'}`}>{statusConfig[k].label}</button>
                              ))}
                              <button onClick={()=>updateStatus(o.id, 'delivered')} className={`p-2 rounded-lg ${o.status==='delivered'?'bg-slate-800 text-white':'bg-slate-100'}`}>Entregar</button>
+                             
                              <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                             <button onClick={()=>addFinishedPhoto(o)} className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-teal-50 text-teal-600 border-teal-200' : 'bg-white text-slate-400 border-slate-200'}`}><Camera size={18}/></button>
-                             <button onClick={()=>sendWhatsAppMessage(o)} className="bg-green-50 text-green-600 border border-green-200 p-2 rounded-lg hover:bg-green-100"><Send size={18}/></button>
-                             {((o.totalPrice||0) - (o.deposit||0)) > 0 && <button onClick={()=>markAsPaid(o)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 p-2 rounded-lg"><Banknote size={18}/></button>}
+                             
+                             <button 
+                                onClick={()=>deleteFinishedPhoto(o)} 
+                                className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'hidden'}`} 
+                                title="Borrar foto"
+                             >
+                                <Trash2 size={18}/>
+                             </button>
+
+                             <button onClick={()=>addFinishedPhoto(o)} className={`p-2 rounded-lg border ${o.finishedImage ? 'bg-teal-50 text-teal-600 border-teal-200' : 'bg-white text-slate-400 border-slate-200'}`} title="Agregar foto producto terminado">
+                                <Camera size={18}/>
+                             </button>
+
+                             <button onClick={()=>sendWhatsAppMessage(o)} className="bg-green-50 text-green-600 border border-green-200 p-2 rounded-lg hover:bg-green-100" title="Enviar aviso por WhatsApp">
+                                <Send size={18}/>
+                             </button>
+
+                             {((o.totalPrice||0) - (o.deposit||0)) > 0 && <button onClick={()=>markAsPaid(o)} className="bg-yellow-50 text-yellow-600 border border-yellow-200 p-2 rounded-lg" title="Saldar deuda"><Banknote size={18}/></button>}
+                             
                              <button onClick={()=>deleteOrder(o.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16}/></button>
                           </div>
                        </div>
