@@ -304,28 +304,32 @@ export default function App() {
         }
     });
 
-    if (updates.size === 0) return; // Nada que descontar
+    // MODIFICACION: Si hay stock para descontar, lo preparamos. Si no, seguimos igual para actualizar el estado.
+    if (updates.size > 0) {
+        updates.forEach((qtyToRemove, stockId) => {
+            const stockItem = stockItems.find(s => s.id === stockId);
+            if (stockItem) {
+                const newQty = stockItem.quantity - qtyToRemove;
+                const stockRef = doc(db, 'artifacts', appId, 'public', 'data', 'stock', stockId);
+                batch.update(stockRef, { quantity: newQty, updatedAt: serverTimestamp() });
+            }
+        });
+    }
 
-    // Preparar actualizaciones de stock
-    updates.forEach((qtyToRemove, stockId) => {
-        const stockItem = stockItems.find(s => s.id === stockId);
-        if (stockItem) {
-            const newQty = stockItem.quantity - qtyToRemove;
-            const stockRef = doc(db, 'artifacts', appId, 'public', 'data', 'stock', stockId);
-            batch.update(stockRef, { quantity: newQty, updatedAt: serverTimestamp() });
-        }
-    });
-
-    // Marcar pedido como descontado
+    // Marcar pedido como descontado y actualizar estado (SIEMPRE se ejecuta, haya o no materiales)
     const orderRef = doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id);
     batch.update(orderRef, { status: targetStatus, stockDeducted: true, updatedAt: serverTimestamp() });
 
     try {
         await batch.commit();
-        showNotification("Stock descontado automáticamente", "success");
+        if (updates.size > 0) {
+            showNotification("Stock descontado automáticamente", "success");
+        } else {
+            showNotification("Estado actualizado (Sin consumo de stock)", "success");
+        }
     } catch (e) {
         console.error("Error descontando stock", e);
-        showNotification("Error al descontar stock", "error");
+        showNotification("Error al procesar el pedido", "error");
     }
   };
 
