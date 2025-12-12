@@ -524,7 +524,41 @@ export default function App() {
   const deleteFinishedPhoto = async (order) => { if(window.confirm("¿Borrar foto?")) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', order.id), { finishedImage: '' }); showNotification("Foto eliminada"); } };
   const sendWhatsAppMessage = (order) => { if (!order.phone) return showNotification("Sin teléfono", "error"); const statusText = statusConfig[order.status]?.label || "Actualizado"; const message = `Hola ${order.clientName}! 👋\n\nTe escribimos de Inperu Producciones.\n\nTu pedido #${order.orderId} ha cambiado de estado a: *${statusText}*.\n\nPuedes ver el detalle aquí: ${APP_URL}\n\n¡Muchas gracias!`; window.open(`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`, '_blank'); };
   const handleAdminLogin = (e) => { e.preventDefault(); if (adminPass === 'Luisana1510++') { setIsAdmin(true); setView('admin_panel'); setAdminPass(''); showNotification("¡Bienvenida!"); } else { showNotification("Clave incorrecta", "error"); } };
-  const handleSearch = (e) => { e.preventDefault(); setLoading(true); setTimeout(() => { const res = orders.filter(o => (o.phone?.replace(/\D/g,'').includes(searchQuery.replace(/\D/g,''))) || o.orderId.toLowerCase() === searchQuery.toLowerCase() || o.clientName.toLowerCase().includes(searchQuery.toLowerCase())); if (res.length > 0) { setFoundOrders(res); setView('search_result'); } else { showNotification("No encontrado", "error"); } setLoading(false); }, 600); };
+  const handleSearch = (e) => { 
+    e.preventDefault(); 
+    setLoading(true); 
+    setTimeout(() => { 
+      const q = searchQuery.toLowerCase().trim();
+      const qNum = q.replace(/\D/g,'');
+      
+      // 1. Prioridad: Coincidencia Exacta de ID de Pedido
+      // Si el usuario escribe un número de pedido exacto, asumimos que quiere ESE pedido y no coincidencias parciales de teléfono.
+      const exactIdMatch = orders.filter(o => o.orderId.toString().toLowerCase() === q);
+      
+      let res = [];
+      
+      if (exactIdMatch.length > 0) {
+          res = exactIdMatch;
+      } else {
+          // 2. Si no es un ID exacto, buscamos amplio (Nombre o Teléfono)
+          res = orders.filter(o => {
+             const matchesName = o.clientName.toLowerCase().includes(q);
+             // Teléfono: solo buscamos si la query tiene al menos 3 digitos para evitar ruido, y buscamos parcial
+             const matchesPhone = o.phone && qNum.length >= 3 && o.phone.replace(/\D/g,'').includes(qNum);
+             
+             return matchesName || matchesPhone;
+          });
+      }
+
+      if (res.length > 0) { 
+        setFoundOrders(res); 
+        setView('search_result'); 
+      } else { 
+        showNotification("No encontrado", "error"); 
+      } 
+      setLoading(false); 
+    }, 600); 
+  };
 
   // FILTRO ADMIN
   const filteredOrders = useMemo(() => {
